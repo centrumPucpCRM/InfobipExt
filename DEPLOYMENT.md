@@ -7,7 +7,7 @@ git commit -m "Your commit description"
 git push origin main
 ------------------------
 Cambios en variables .env
-scp -i "infobip.pem" C:\Users\Windows\Downloads\InfobipExt\infobip.db ec2-user@{ip-elastica}:/home/ec2-user/infobip/InfobipExt/
+scp -i "infobip.pem" C:\Users\Windows\Downloads\InfobipExt\.env ec2-user@{ip-elastica}:/home/ec2-user/infobip/InfobipExt/
 ================================================================
 Desplegado:
 git pull origin main
