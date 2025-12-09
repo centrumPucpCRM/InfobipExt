@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Conversations API</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .tabs-container {
+            background: white;
+            border-radius: 15px 15px 0 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            overflow: hidden;
+            margin-bottom: 0;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1.1em;
+            transition: all 0.3s;
+            border: none;
+            background: transparent;
+            color: #666;
+        }
+
+        .tab:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            margin-bottom: -3px;
+        }
+
+        .flows-container {
+            background: white;
+            border-radius: 0 0 15px 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            padding: 30px;
+        }
+
+        .flow-content {
+            display: none;
+        }
+
+        .flow-content.active {
+            display: block;
+        }
+
+        .flow-title {
+            font-size: 1.3em;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            font-weight: bold;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+            font-weight: bold;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results {
+            margin-top: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .step-indicator {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            color: #667eea;
+            border-left: 4px solid #667eea;
+        }
+
+        .program-card, .conversation-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .program-card:hover, .conversation-card:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .program-card h3, .conversation-card h3 {
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .program-card p, .conversation-card p {
+            color: #666;
+            margin: 5px 0;
+            font-size: 0.9em;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .message-timeline {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .message-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .message-item.inbound {
+            border-left-color: #28a745;
+        }
+
+        .message-item.outbound {
+            border-left-color: #007bff;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .message-content {
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #f5c6cb;
+            margin-top: 15px;
+        }
+
+        .back-button {
+            background: #6c757d;
+            margin-bottom: 15px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Test de Flujos de Conversaciones</h1>
+        
+        <div class="tabs-container">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('flowA')">
+                    📋 Probar por Party Number
+                </button>
+                <button class="tab" onclick="switchTab('flowB')">
+                    🎯 Probar por Lead ID
+                </button>
+            </div>
+        </div>
+
+        <div class="flows-container">
+            <!-- FLUJO A: Por Party Number -->
+            <div id="flowA-content" class="flow-content active">
+                <div class="flow-title">Flujo por Cliente (Party Number)</div>
+                
+                <div id="flowA-step1">
+                    <div class="input-group">
+                        <label for="partyNumber">Party Number del Cliente:</label>
+                        <input type="number" id="partyNumber" placeholder="Ej: 300000113820516">
+                    </div>
+                    <button onclick="buscarProgramas()">🔍 Buscar Programas</button>
+                </div>
+
+                <div id="flowA-step2" style="display: none;">
+                    <button class="back-button" onclick="resetFlowA()">⬅️ Volver</button>
+                    <div class="step-indicator">Paso 2: Selecciona un programa</div>
+                    <div id="programsList" class="results"></div>
+                </div>
+
+                <div id="flowA-step3" style="display: none;">
+                    <button class="back-button" onclick="volverProgramas()">⬅️ Volver a Programas</button>
+                    <div class="step-indicator">Paso 3: Selecciona una conversación</div>
+                    <div id="conversationsList" class="results"></div>
+                </div>
+
+                <div id="flowA-step4" style="display: none;">
+                    <button class="back-button" onclick="volverConversaciones()">⬅️ Volver a Conversaciones</button>
+                    <div class="step-indicator">Paso 4: Mensajes de la conversación</div>
+                    <div id="messagesTimelineA" class="results"></div>
+                </div>
+            </div>
+
+            <!-- FLUJO B: Por Lead ID -->
+            <div id="flowB-content" class="flow-content">
+                <div class="flow-title">Flujo por Lead ID</div>
+                
+                <div id="flowB-step1">
+                    <div class="input-group">
+                        <label for="leadId">Lead ID:</label>
+                        <input type="text" id="leadId" placeholder="Ej: 300000113820516">
+                    </div>
+                    <button onclick="buscarConversacionesPorLead()">🔍 Buscar Conversaciones</button>
+                </div>
+
+                <div id="flowB-step2" style="display: none;">
+                    <button class="back-button" onclick="resetFlowB()">⬅️ Volver</button>
+                    <div class="step-indicator">Paso 2: Selecciona una conversación</div>
+                    <div id="conversationsListB" class="results"></div>
+                </div>
+
+                <div id="flowB-step3" style="display: none;">
+                    <button class="back-button" onclick="volverConversacionesB()">⬅️ Volver a Conversaciones</button>
+                    <div class="step-indicator">Paso 3: Mensajes de la conversación</div>
+                    <div id="messagesTimelineB" class="results"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'https://ma-unhappy-freida.ngrok-free.dev/api/v1';
+        const API_TOKEN = 'test-token';
+
+        let currentPartyNumber = null;
+        let currentCodigoCrm = null;
+        let currentLeadId = null;
+
+        // Función para cambiar de pestaña
+        function switchTab(tabName) {
+            // Remover clase active de todos los tabs y contenidos
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.flow-content').forEach(content => content.classList.remove('active'));
+            
+            // Agregar clase active al tab y contenido seleccionado
+            if (tabName === 'flowA') {
+                document.querySelector('.tab:nth-child(1)').classList.add('active');
+                document.getElementById('flowA-content').classList.add('active');
+            } else {
+                document.querySelector('.tab:nth-child(2)').classList.add('active');
+                document.getElementById('flowB-content').classList.add('active');
+            }
+        }
+
+        // Utilidad para hacer peticiones
+        async function fetchAPI(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    headers: {
+                        'Authorization': `Bearer ${API_TOKEN}`,
+                        'ngrok-skip-browser-warning': 'true'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('Error en petición:', error);
+                throw error;
+            }
+        }
+
+        function showLoading(containerId) {
+            document.getElementById(containerId).innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Cargando...</p>
+                </div>
+            `;
+        }
+
+        function showError(containerId, message) {
+            document.getElementById(containerId).innerHTML = `
+                <div class="error">
+                    <strong>❌ Error:</strong> ${message}
+                </div>
+            `;
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleString('es-PE', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // ==================== FLUJO A ====================
+
+        async function buscarProgramas() {
+            currentPartyNumber = document.getElementById('partyNumber').value;
+            
+            if (!currentPartyNumber) {
+                alert('Por favor ingresa un Party Number');
+                return;
+            }
+
+            document.getElementById('flowA-step1').style.display = 'none';
+            document.getElementById('flowA-step2').style.display = 'block';
+            showLoading('programsList');
+
+            try {
+                const programas = await fetchAPI(`/conversations/people/${currentPartyNumber}/programs`);
+                
+                if (programas.length === 0) {
+                    document.getElementById('programsList').innerHTML = `
+                        <div class="empty-state">
+                            <svg fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"></path></svg>
+                            <p>No se encontraron programas para este cliente</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                programas.forEach(programa => {
+                    html += `
+                        <div class="program-card" onclick="seleccionarPrograma('${programa.codigo_crm}')">
+                            <h3>📦 ${programa.codigo_crm}</h3>
+                            <p>
+                                <span class="badge badge-info">${programa.total_conversaciones} conversaciones</span>
+                                <span class="badge badge-success">${programa.conversaciones_activas} activas</span>
+                            </p>
+                            ${programa.ultima_actividad ? `<p>🕒 Última actividad: ${formatDate(programa.ultima_actividad)}</p>` : ''}
+                            ${programa.lead_ids.length > 0 ? `<p>🎯 Lead IDs: ${programa.lead_ids.join(', ')}</p>` : ''}
+                        </div>
+                    `;
+                });
+
+                document.getElementById('programsList').innerHTML = html;
+            } catch (error) {
+                showError('programsList', error.message);
+            }
+        }
+
+        async function seleccionarPrograma(codigoCrm) {
+            currentCodigoCrm = codigoCrm;
+            
+            document.getElementById('flowA-step2').style.display = 'none';
+            document.getElementById('flowA-step3').style.display = 'block';
+            showLoading('conversationsList');
+
+            try {
+                const conversaciones = await fetchAPI(`/conversations/people/${currentPartyNumber}/programs/${codigoCrm}/conversations`);
+                
+                if (conversaciones.length === 0) {
+                    document.getElementById('conversationsList').innerHTML = `
+                        <div class="empty-state">
+                            <p>No se encontraron conversaciones</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                conversaciones.forEach(conv => {
+                    const estadoBadge = conv.estado_conversacion === 'ACTIVE' ? 'badge-success' : 'badge-warning';
+                    html += `
+                        <div class="conversation-card" onclick="verMensajes('${conv.id_conversation}', 'A')">
+                            <h3>💬 ${conv.telefono_creado || 'Sin teléfono'}</h3>
+                            <p>
+                                <span class="badge ${estadoBadge}">${conv.estado_conversacion || 'N/A'}</span>
+                                <span class="badge badge-info">${conv.total_mensajes} mensajes</span>
+                            </p>
+                            ${conv.ultimo_mensaje_preview ? `<p>💬 "${conv.ultimo_mensaje_preview}"</p>` : ''}
+                            ${conv.fecha_ultimo_mensaje ? `<p>🕒 ${formatDate(conv.fecha_ultimo_mensaje)}</p>` : ''}
+                        </div>
+                    `;
+                });
+
+                document.getElementById('conversationsList').innerHTML = html;
+            } catch (error) {
+                showError('conversationsList', error.message);
+            }
+        }
+
+        function volverProgramas() {
+            document.getElementById('flowA-step3').style.display = 'none';
+            document.getElementById('flowA-step2').style.display = 'block';
+        }
+
+        function volverConversaciones() {
+            document.getElementById('flowA-step4').style.display = 'none';
+            document.getElementById('flowA-step3').style.display = 'block';
+        }
+
+        function resetFlowA() {
+            document.getElementById('flowA-step2').style.display = 'none';
+            document.getElementById('flowA-step1').style.display = 'block';
+            currentPartyNumber = null;
+            currentCodigoCrm = null;
+        }
+
+        // ==================== FLUJO B ====================
+
+        async function buscarConversacionesPorLead() {
+            currentLeadId = document.getElementById('leadId').value;
+            
+            if (!currentLeadId) {
+                alert('Por favor ingresa un Lead ID');
+                return;
+            }
+
+            document.getElementById('flowB-step1').style.display = 'none';
+            document.getElementById('flowB-step2').style.display = 'block';
+            showLoading('conversationsListB');
+
+            try {
+                const conversaciones = await fetchAPI(`/conversations/lead/${currentLeadId}/conversations`);
+                
+                if (conversaciones.length === 0) {
+                    document.getElementById('conversationsListB').innerHTML = `
+                        <div class="empty-state">
+                            <svg fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"></path></svg>
+                            <p>No se encontraron conversaciones para este Lead ID</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                conversaciones.forEach(conv => {
+                    const estadoBadge = conv.estado_conversacion === 'ACTIVE' ? 'badge-success' : 'badge-warning';
+                    html += `
+                        <div class="conversation-card" onclick="verMensajes('${conv.id_conversation}', 'B')">
+                            <h3>💬 ${conv.telefono_creado || 'Sin teléfono'}</h3>
+                            <p>
+                                <span class="badge ${estadoBadge}">${conv.estado_conversacion || 'N/A'}</span>
+                                <span class="badge badge-info">${conv.total_mensajes} mensajes</span>
+                            </p>
+                            ${conv.codigo_crm ? `<p>📦 Código CRM: ${conv.codigo_crm}</p>` : ''}
+                            ${conv.ultimo_mensaje_preview ? `<p>💬 "${conv.ultimo_mensaje_preview}"</p>` : ''}
+                            ${conv.fecha_ultimo_mensaje ? `<p>🕒 ${formatDate(conv.fecha_ultimo_mensaje)}</p>` : ''}
+                        </div>
+                    `;
+                });
+
+                document.getElementById('conversationsListB').innerHTML = html;
+            } catch (error) {
+                showError('conversationsListB', error.message);
+            }
+        }
+
+        function volverConversacionesB() {
+            document.getElementById('flowB-step3').style.display = 'none';
+            document.getElementById('flowB-step2').style.display = 'block';
+        }
+
+        function resetFlowB() {
+            document.getElementById('flowB-step2').style.display = 'none';
+            document.getElementById('flowB-step1').style.display = 'block';
+            currentLeadId = null;
+        }
+
+        // ==================== COMÚN ====================
+
+        async function verMensajes(idConversation, flujo) {
+            const timelineId = flujo === 'A' ? 'messagesTimelineA' : 'messagesTimelineB';
+            const stepId = flujo === 'A' ? 'flowA-step4' : 'flowB-step3';
+            const prevStepId = flujo === 'A' ? 'flowA-step3' : 'flowB-step2';
+
+            document.getElementById(prevStepId).style.display = 'none';
+            document.getElementById(stepId).style.display = 'block';
+            showLoading(timelineId);
+
+            try {
+                const detalle = await fetchAPI(`/conversations/${idConversation}/messages`);
+                
+                let html = `
+                    <div class="message-timeline">
+                        <h3>📱 Conversación: ${detalle.telefono_creado || 'N/A'}</h3>
+                        <p><strong>Estado:</strong> ${detalle.estado_conversacion || 'N/A'}</p>
+                        ${detalle.codigo_crm ? `<p><strong>Código CRM:</strong> ${detalle.codigo_crm}</p>` : ''}
+                        ${detalle.lead_id ? `<p><strong>Lead ID:</strong> ${detalle.lead_id}</p>` : ''}
+                        ${detalle.people_party_number ? `<p><strong>Party Number:</strong> ${detalle.people_party_number}</p>` : ''}
+                        <p><strong>Total mensajes:</strong> ${detalle.total_mensajes}</p>
+                        <hr style="margin: 15px 0; border: none; border-top: 2px solid #ddd;">
+                `;
+
+                if (detalle.mensajes.length === 0) {
+                    html += '<p style="text-align: center; color: #999;">No hay mensajes</p>';
+                } else {
+                    detalle.mensajes.forEach(msg => {
+                        const direccionClass = msg.direccion === 'INBOUND' ? 'inbound' : 'outbound';
+                        const direccionIcon = msg.direccion === 'INBOUND' ? '📩' : '📤';
+                        html += `
+                            <div class="message-item ${direccionClass}">
+                                <div class="message-header">
+                                    <span><strong>${direccionIcon} ${msg.direccion || 'N/A'}</strong> - ${msg.tipo || 'N/A'}</span>
+                                    <span>${formatDate(msg.created_at_infobip)}</span>
+                                </div>
+                                <div class="message-content">
+                                    ${msg.contenido || '<em>Sin contenido</em>'}
+                                </div>
+                                ${msg.remitente ? `<small style="color: #666;">De: ${msg.remitente}</small>` : ''}
+                            </div>
+                        `;
+                    });
+                }
+
+                html += '</div>';
+                document.getElementById(timelineId).innerHTML = html;
+            } catch (error) {
+                showError(timelineId, error.message);
+            }
+        }
+
+        // Enter key handlers
+        document.getElementById('partyNumber').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') buscarProgramas();
+        });
+
+        document.getElementById('leadId').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') buscarConversacionesPorLead();
+        });
+    </script>
+</body>
+</html>
