@@ -68,6 +68,11 @@ class RdvService:
             return None
     
     @staticmethod
+    def find_by_infobip_external_id(db: Session, external_id: str) -> Optional[RdvExt]:
+        """Find RDV by infobip_external_id"""
+        return db.query(RdvExt).filter(RdvExt.infobip_external_id == external_id).first()
+    
+    @staticmethod
     def delete(db: Session, rdv_id: int) -> bool:
         """Delete an RDV"""
         db_rdv = RdvService.get_by_id(db, rdv_id)
