@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./infobip.db"
     
     # Security - Token de autenticación
-    API_TOKEN: str = "test-token"  # Cambiar en producción
+    API_TOKEN: str
     
     # Environment
     ENVIRONMENT: str = "development"

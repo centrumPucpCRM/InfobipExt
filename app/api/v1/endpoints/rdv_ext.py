@@ -440,9 +440,9 @@ def _obtener_correo_desde_oracle(party_number: str) -> Optional[str]:
     """
     Consulta Oracle CRM y devuelve ResourceEmail para el party_number dado.
     """
-    ORACLE_BASE_URL = "https://cang.fa.us2.oraclecloud.com/crmRestApi/resources/11.13.18.05/resourceUsers"
+    ORACLE_BASE_URL = f"{settings.ORACLE_CRM_URL}/resourceUsers"
     ORACLE_HEADERS = {
-        "Authorization": "Basic QVBJQ1JNOlZ3ZXVlMTIzNDU=",
+        "Authorization": settings.ORACLE_CRM_AUTH,
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
