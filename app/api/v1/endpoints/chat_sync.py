@@ -4,7 +4,7 @@ Chat Sync endpoints
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db, get_current_user
+from app.core.dependencies import get_db, verify_token
 from app.schemas.chat_sync import ChatSyncRequest, ChatSyncResponse
 from app.orchestrators.chat_orchestrator import ChatOrchestrator
 
@@ -15,7 +15,7 @@ router = APIRouter()
 async def sincronizar_chat(
     request: ChatSyncRequest,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    token: str = Depends(verify_token)
 ):
     """
     Sincroniza un chat de Infobip con el sistema RDV
