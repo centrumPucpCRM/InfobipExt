@@ -43,4 +43,4 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint - No requiere autenticación"""
-    return {"status": "healthy"}
+    return {"status": "healthy", "message": "Soy el health de la version dockerizada"}
