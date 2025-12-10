@@ -522,6 +522,14 @@ class SalesOrchestrator:
             osc_people_dni: DNI del cliente (obligatorio)
             osc_conversation_id: ID de conversación existente en Infobip (opcional)
         """
+        # Normalizar teléfono: si viene con '+' al inicio quitarlo y eliminar espacios
+        if osc_people_telefono:
+            telefono_normalizado = osc_people_telefono.strip()
+            if telefono_normalizado.startswith("+"):
+                telefono_normalizado = telefono_normalizado.lstrip("+")
+            telefono_normalizado = telefono_normalizado.replace(" ", "")
+            osc_people_telefono = telefono_normalizado
+
         osc_conversation_lead_id = self.obtenerLeadIdPorNumber(osc_conversation_lead_id)  # Me estan pasando el leadnumber en ves de el lead id
         if osc_rdv_party_number is None:
            osc_rdv_party_number = self.obtenerPartyNumberRDV(osc_rdv_party_id)
