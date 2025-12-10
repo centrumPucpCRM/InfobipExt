@@ -24,3 +24,7 @@ class ChatSyncResponse(BaseModel):
     syncResult: Optional[dict] = None
     status: str = "success"
     message: Optional[str] = None
+    
+    class Config:
+        # Permitir campos adicionales sin validación estricta
+        extra = "allow"

@@ -41,7 +41,11 @@ async def sincronizar_chat(
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result.get("message"))
         
-        return ChatSyncResponse(**result)
+        # Convertir person_id a string si es necesario
+        if "person_id" in result and result["person_id"] is not None:
+            result["person_id"] = str(result["person_id"])
+        
+        return result  # Devolver dict directamente, FastAPI lo serializa
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en sincronización: {str(e)}")
