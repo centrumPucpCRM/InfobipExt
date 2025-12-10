@@ -3,7 +3,6 @@ Chat Orchestrator - Maneja la sincronización de chats con Infobip
 """
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
-import requests
 
 from app.services.infobip_service import InfobipService
 from app.services.rdv_service import RdvService
@@ -27,7 +26,7 @@ class ChatOrchestrator:
         agent_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Llama al endpoint interno para sincronizar conversación con RDV
+        Sincroniza conversación con RDV usando métodos internos directos
         
         Args:
             telefono: Teléfono del usuario
@@ -37,43 +36,58 @@ class ChatOrchestrator:
             agent_id: ID del agente (opcional)
             
         Returns:
-            Respuesta del endpoint o None si falla
+            Respuesta de la sincronización o None si falla
         """
         try:
-            url = f"{settings.API_V1_STR}/conversations/sync-from-infobip"
-            # Construir URL completa para llamada interna
-            base_url = "http://localhost:8000"  # Llamada interna
-            full_url = f"{base_url}{url}"
+            from app.services.conversation_service import ConversationService
+            from app.services.people_service import PeopleService
+            from app.services.rdv_service import RdvService
             
-            payload = {
-                "telefono": telefono,
-                "estado_conversacion": estado_conversacion,
-                "conversationId": conversation_id,
-                "personId": str(person_id) if person_id is not None else None,
-            }
+            # Buscar People por teléfono
+            people = None
+            if telefono:
+                people = PeopleService.get_by_phone(self.db, telefono)
             
+            # Buscar RDV por agent_id si existe
+            rdv = None
             if agent_id:
-                payload["agentId"] = agent_id
+                rdv = RdvService.find_by_infobip_external_id(self.db, agent_id)
             
-            # Quitar claves con None
-            payload = {k: v for k, v in payload.items() if v is not None}
+            # Crear o actualizar conversación
+            existing_conversation = ConversationService.get_by_external_id(self.db, conversation_id)
             
-            headers = {
-                "Authorization": f"Bearer {settings.API_TOKEN}",
-                "Content-Type": "application/json",
-                "Accept": "application/json"
+            if existing_conversation:
+                # Actualizar conversación existente
+                existing_conversation.estado_conversacion = estado_conversacion
+                if people:
+                    existing_conversation.id_people = people.id
+                if rdv:
+                    existing_conversation.id_rdv = rdv.id
+                self.db.commit()
+                self.db.refresh(existing_conversation)
+                conversation = existing_conversation
+            else:
+                # Crear nueva conversación
+                conversation = ConversationService.create_flexible(
+                    db=self.db,
+                    id_conversation=conversation_id,
+                    id_people=people.id if people else None,
+                    id_rdv=rdv.id if rdv else None,
+                    estado_conversacion=estado_conversacion,
+                    telefono_creado=telefono
+                )
+            
+            print(f"[ChatOrchestrator] Conversación sincronizada: {conversation.id}")
+            
+            return {
+                "success": True,
+                "conversation_id": conversation.id,
+                "external_id": conversation.id_conversation,
+                "people_id": conversation.id_people,
+                "rdv_id": conversation.id_rdv,
+                "estado": conversation.estado_conversacion
             }
             
-            response = requests.post(full_url, headers=headers, json=payload, timeout=10)
-            
-            print(f"[ChatOrchestrator] Sync Status: {response.status_code}")
-            print(f"[ChatOrchestrator] Sync Body: {response.text}")
-            
-            if response.ok:
-                return response.json()
-            else:
-                return None
-                
         except Exception as e:
             print(f"[ChatOrchestrator] Excepción en sync: {e}")
             return None
