@@ -486,7 +486,7 @@ class SalesOrchestrator:
             return items[0].get("LeadId")
         except Exception:
             return None
-    def obtenerPartyNumberRDV(PartyId):
+    def obtenerPartyNumberRDV(self, PartyId):
         url = "https://cang.fa.us2.oraclecloud.com/crmRestApi/resources/11.13.18.05/resourceUsers/"
         request_headers = {
             'Authorization': "Basic QVBJQ1JNOlZ3ZXVlMTIzNDU=",
