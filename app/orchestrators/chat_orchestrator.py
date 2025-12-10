@@ -298,6 +298,18 @@ class ChatOrchestrator:
         )
         
         print(f"[ChatOrchestrator] Resultado sync: {sync_result}")
+        # 6.1. Sincronizar mensajes y notas de Infobip para esta conversación
+        try:
+            from app.services.mensaje_service import MensajeService
+            total_msgs, nuevos = MensajeService.sync_mensajes_from_infobip(self.db, conversation_id)
+            print(f"[ChatOrchestrator] Mensajes sincronizados: total={total_msgs}, nuevos={nuevos}")
+            respuesta["messages_sync"] = {
+                "total_from_infobip": total_msgs,
+                "new_inserted": nuevos
+            }
+        except Exception as e:
+            print(f"[ChatOrchestrator] Error sincronizando mensajes: {e}")
+            respuesta["messages_sync_error"] = str(e)
         
         # 6. Armar respuesta
         respuesta = {
