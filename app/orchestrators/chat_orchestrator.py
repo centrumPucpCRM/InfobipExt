@@ -22,7 +22,7 @@ class ChatOrchestrator:
         telefono: str,
         estado_conversacion: str,
         conversation_id: str,
-        person_id: Optional[str],
+        local_people: Optional[Any],
         agent_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
@@ -32,7 +32,7 @@ class ChatOrchestrator:
             telefono: Teléfono del usuario
             estado_conversacion: Estado de la conversación
             conversation_id: ID de la conversación
-            person_id: ID de la persona
+            local_people: Objeto People local (ya obtenido)
             agent_id: ID del agente (opcional)
             
         Returns:
@@ -40,13 +40,10 @@ class ChatOrchestrator:
         """
         try:
             from app.services.conversation_service import ConversationService
-            from app.services.people_service import PeopleService
             from app.services.rdv_service import RdvService
             
-            # Buscar People por teléfono
-            people = None
-            if telefono:
-                people = PeopleService.get_by_phone(self.db, telefono)
+            # Usar el people que ya se obtuvo/creó
+            people = local_people
             
             # Buscar RDV por agent_id si existe
             rdv = None
@@ -92,7 +89,7 @@ class ChatOrchestrator:
             print(f"[ChatOrchestrator] Excepción en sync: {e}")
             return None
     
-    def create_or_find_person(self, telefono: str) -> Optional[str]:
+    def create_or_find_person(self, telefono: str) -> tuple[Optional[str], Optional[Any]]:
         """
         Crea o encuentra una persona, manejando todos los casos:
         1. Intenta crear en Infobip
@@ -104,7 +101,7 @@ class ChatOrchestrator:
             telefono: Número de teléfono
             
         Returns:
-            person_id de Infobip o None si falla
+            Tupla (infobip_person_id, local_people_object)
         """
         try:
             from app.services.people_service import PeopleService
@@ -114,7 +111,19 @@ class ChatOrchestrator:
             
             if infobip_person_id:
                 print(f"[ChatOrchestrator] Persona obtenida de Infobip: {infobip_person_id}")
-                return infobip_person_id
+                # Buscar o crear el people local
+                local_people = PeopleService.get_by_phone(self.db, telefono)
+                if not local_people:
+                    # Crear people local con el infobip_id
+                    from app.schemas.people_ext import PeopleExtCreateFlexible
+                    people_create = PeopleExtCreateFlexible(
+                        party_id=None,
+                        party_number=None,
+                        telefono=telefono,
+                        infobip_id=infobip_person_id
+                    )
+                    local_people = PeopleService.create_flexible(self.db, people_create)
+                return infobip_person_id, local_people
             
             # 2. Si falla Infobip, buscar en sistema local
             print(f"[ChatOrchestrator] Buscando persona en sistema local por teléfono: {telefono}")
@@ -122,7 +131,7 @@ class ChatOrchestrator:
             
             if local_people and local_people.infobip_id:
                 print(f"[ChatOrchestrator] Persona encontrada en local con infobip_id: {local_people.infobip_id}")
-                return local_people.infobip_id
+                return local_people.infobip_id, local_people
             
             # 3. Si no existe en local, obtener datos completos de Infobip
             print(f"[ChatOrchestrator] Obteniendo datos completos de Infobip para: {telefono}")
@@ -142,7 +151,7 @@ class ChatOrchestrator:
                 
                 new_people = PeopleService.create_flexible(self.db, people_create)
                 print(f"[ChatOrchestrator] Persona creada en local con datos de Infobip: {new_people.id}")
-                return infobip_person_data.get("id")
+                return infobip_person_data.get("id"), new_people
             else:
                 # Si no se encuentra en Infobip, crear con datos mínimos
                 from app.schemas.people_ext import PeopleExtCreateFlexible
@@ -164,15 +173,13 @@ class ChatOrchestrator:
                     new_people.infobip_id = infobip_person_id
                     self.db.commit()
                     print(f"[ChatOrchestrator] Actualizado con infobip_id: {infobip_person_id}")
-                    return infobip_person_id
-            
-            # Si aún no se puede crear en Infobip, devolver None
-            print(f"[ChatOrchestrator] No se pudo obtener person_id de Infobip para: {telefono}")
-            return None
+                    return infobip_person_id, new_people
+                else:
+                    return None, new_people
             
         except Exception as e:
             print(f"[ChatOrchestrator] Error en create_or_find_person: {e}")
-            return None
+            return None, None
     
     def get_rdv_by_external_id(self, external_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -252,14 +259,19 @@ class ChatOrchestrator:
         
         # 3. Resolver person_id (usar el que viene o crearlo)
         person_id = persona
+        local_people = None  # Para asociar a la conversación
+        
         if not person_id or person_id == "":
             print("[ChatOrchestrator] No se recibió person_id. Iniciando flujo de creación de persona...")
             if telefono_usuario:
-                person_id = self.create_or_find_person(telefono_usuario)
+                person_id, local_people = self.create_or_find_person(telefono_usuario)
             else:
                 print("[ChatOrchestrator] No hay teléfono de usuario para crear persona.")
         else:
             print(f"[ChatOrchestrator] Usando person_id existente: {person_id}")
+            # Buscar el people local por teléfono para asociar a la conversación
+            from app.services.people_service import PeopleService
+            local_people = PeopleService.get_by_phone(self.db, telefono_usuario)
         
         # 4. Obtener agentId desde la conversación
         agent_id = InfobipService.get_agent_id_from_conversation(conversation_id)
@@ -274,7 +286,7 @@ class ChatOrchestrator:
             telefono=telefono_usuario,
             estado_conversacion=estado_conversacion,
             conversation_id=conversation_id,
-            person_id=person_id,
+            local_people=local_people,  # Pasar el objeto people local
             agent_id=agent_id
         )
         

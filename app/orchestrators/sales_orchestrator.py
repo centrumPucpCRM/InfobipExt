@@ -456,7 +456,51 @@ class SalesOrchestrator:
 
         return None
 
-    
+    def obtenerLeadIdPorNumber(self, leadNumber: int) -> Optional[str]:
+        """
+        Consulta Oracle Sales Cloud por LeadNumber y devuelve el LeadId.
+
+        Usa `settings.ORACLE_CRM_URL` y `settings.ORACLE_CRM_AUTH`.
+        """
+        try:
+            base_url = f"{settings.ORACLE_CRM_URL}/leads/"
+            headers = {
+                "Authorization": settings.ORACLE_CRM_AUTH,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+            params = {
+                "onlyData": "true",
+                "fields": "LeadId",
+                "q": f"LeadNumber={leadNumber}",
+                "limit": 1,
+            }
+
+            resp = requests.get(base_url, headers=headers, params=params, timeout=10)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            items = data.get("items") or []
+            if not items:
+                return None
+            return items[0].get("LeadId")
+        except Exception:
+            return None
+    def obtenerPartyNumberRDV(PartyId):
+        url = "https://cang.fa.us2.oraclecloud.com/crmRestApi/resources/11.13.18.05/resourceUsers/"
+        request_headers = {
+            'Authorization': "Basic QVBJQ1JNOlZ3ZXVlMTIzNDU=",
+            'Content-Type': 'application/json'
+        }
+        params = {
+            #"fields":"PartyName,ResourceEmail",
+            'onlyData': 'true',
+            "q":f"ResourcePartyId={PartyId}"
+        }
+        response = requests.get(url, params=params, headers=request_headers)
+        return response.json()["items"][0]["ResourcePartyNumber"]
+
+
     def flujo_venta_activa(
         self,
         osc_people_dni: str,  # DNI obligatorio
@@ -478,7 +522,11 @@ class SalesOrchestrator:
             osc_people_dni: DNI del cliente (obligatorio)
             osc_conversation_id: ID de conversación existente en Infobip (opcional)
         """
-        # Validar teléfono de Oracle
+        osc_conversation_lead_id = self.obtenerLeadIdPorNumber(osc_conversation_lead_id)  # Me estan pasando el leadnumber en ves de el lead id
+        if osc_rdv_party_number is None:
+           osc_rdv_party_number = self.obtenerPartyNumberRDV(osc_rdv_party_id)
+
+        # Validar teléfono de Oracle    
         OT_valido = self.validar_telefono(osc_people_telefono)
         
         # Buscar People por party
