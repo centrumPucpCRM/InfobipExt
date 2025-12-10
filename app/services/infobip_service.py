@@ -50,8 +50,9 @@ class InfobipService:
                 return person_id
             elif response.status_code == 400 and "already exists" in response.text:
                 # Si ya existe, buscar la persona por teléfono
-                print(f"[InfobipService] Persona ya existe, buscando ID existente...")
-                return InfobipService.find_person_by_phone(phone_number)
+                print(f"[InfobipService] Persona ya existe, buscando datos existentes...")
+                person_data = InfobipService.find_person_by_phone(phone_number)
+                return person_data.get("id") if person_data else None
             else:
                 print(f"[InfobipService] Error al crear persona: {response.status_code} - {response.text}")
                 return None
@@ -61,15 +62,28 @@ class InfobipService:
             return None
     
     @staticmethod
-    def find_person_by_phone(phone_number: str) -> Optional[str]:
+    def get_person_data_by_phone(phone_number: str) -> Optional[Dict[str, Any]]:
         """
-        Busca una persona en Infobip por número de teléfono.
+        Obtiene todos los datos de una persona en Infobip por teléfono.
         
         Args:
             phone_number: Número de teléfono a buscar
             
         Returns:
-            ID de la persona encontrada o None si no existe
+            Dict completo con todos los datos de la persona o None si no existe
+        """
+        return InfobipService.find_person_by_phone(phone_number)
+    
+    @staticmethod
+    def find_person_by_phone(phone_number: str) -> Optional[Dict[str, Any]]:
+        """
+        Busca una persona en Infobip por número de teléfono y obtiene todos sus datos.
+        
+        Args:
+            phone_number: Número de teléfono a buscar
+            
+        Returns:
+            Dict con id, party_id, party_number y otros datos, o None si no existe
         """
         try:
             url = f"https://{settings.INFOBIP_API_HOST}/people/2/persons"
@@ -89,9 +103,34 @@ class InfobipService:
                 persons = data.get("persons", [])
                 
                 if persons:
-                    person_id = persons[0].get("id")
-                    print(f"[InfobipService] Persona encontrada con ID: {person_id}")
-                    return person_id
+                    person = persons[0]
+                    person_id = person.get("id")
+                    
+                    # Extraer custom attributes (party_id y party_number)
+                    custom_attrs = person.get("customAttributes", {})
+                    party_id = custom_attrs.get("party_id") or custom_attrs.get("Party_id")
+                    party_number = custom_attrs.get("party_number") or custom_attrs.get("Party_number")
+                    
+                    # Convertir a enteros si existen
+                    try:
+                        party_id = int(party_id) if party_id else None
+                    except (ValueError, TypeError):
+                        party_id = None
+                    
+                    try:
+                        party_number = int(party_number) if party_number else None
+                    except (ValueError, TypeError):
+                        party_number = None
+                    
+                    result = {
+                        "id": person_id,
+                        "party_id": party_id,
+                        "party_number": party_number,
+                        "telefono": phone_number
+                    }
+                    
+                    print(f"[InfobipService] Persona encontrada: {result}")
+                    return result
                 else:
                     print(f"[InfobipService] No se encontró persona con teléfono: {phone_number}")
                     return None

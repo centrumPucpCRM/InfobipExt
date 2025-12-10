@@ -92,6 +92,88 @@ class ChatOrchestrator:
             print(f"[ChatOrchestrator] Excepción en sync: {e}")
             return None
     
+    def create_or_find_person(self, telefono: str) -> Optional[str]:
+        """
+        Crea o encuentra una persona, manejando todos los casos:
+        1. Intenta crear en Infobip
+        2. Si ya existe, busca en Infobip
+        3. Si no encuentra en Infobip, busca en sistema local
+        4. Si no existe en local, crea en local con datos básicos
+        
+        Args:
+            telefono: Número de teléfono
+            
+        Returns:
+            person_id de Infobip o None si falla
+        """
+        try:
+            from app.services.people_service import PeopleService
+            
+            # 1. Intentar crear/buscar en Infobip
+            infobip_person_id = InfobipService.create_person_with_phone(telefono)
+            
+            if infobip_person_id:
+                print(f"[ChatOrchestrator] Persona obtenida de Infobip: {infobip_person_id}")
+                return infobip_person_id
+            
+            # 2. Si falla Infobip, buscar en sistema local
+            print(f"[ChatOrchestrator] Buscando persona en sistema local por teléfono: {telefono}")
+            local_people = PeopleService.get_by_phone(self.db, telefono)
+            
+            if local_people and local_people.infobip_id:
+                print(f"[ChatOrchestrator] Persona encontrada en local con infobip_id: {local_people.infobip_id}")
+                return local_people.infobip_id
+            
+            # 3. Si no existe en local, obtener datos completos de Infobip
+            print(f"[ChatOrchestrator] Obteniendo datos completos de Infobip para: {telefono}")
+            
+            infobip_person_data = InfobipService.get_person_data_by_phone(telefono)
+            
+            if infobip_person_data:
+                # Crear registro local con datos completos de Infobip
+                from app.schemas.people_ext import PeopleExtCreateFlexible
+                
+                people_create = PeopleExtCreateFlexible(
+                    party_id=infobip_person_data.get("party_id"),
+                    party_number=infobip_person_data.get("party_number"),
+                    telefono=telefono,
+                    infobip_id=infobip_person_data.get("id")
+                )
+                
+                new_people = PeopleService.create_flexible(self.db, people_create)
+                print(f"[ChatOrchestrator] Persona creada en local con datos de Infobip: {new_people.id}")
+                return infobip_person_data.get("id")
+            else:
+                # Si no se encuentra en Infobip, crear con datos mínimos
+                from app.schemas.people_ext import PeopleExtCreateFlexible
+                
+                people_create = PeopleExtCreateFlexible(
+                    party_id=None,
+                    party_number=None,
+                    telefono=telefono,
+                    infobip_id=None
+                )
+                
+                new_people = PeopleService.create_flexible(self.db, people_create)
+                print(f"[ChatOrchestrator] Persona creada en local con datos básicos: {new_people.id}")
+                
+                # Intentar crear en Infobip
+                infobip_person_id = InfobipService.create_person_with_phone(telefono)
+                
+                if infobip_person_id:
+                    new_people.infobip_id = infobip_person_id
+                    self.db.commit()
+                    print(f"[ChatOrchestrator] Actualizado con infobip_id: {infobip_person_id}")
+                    return infobip_person_id
+            
+            # Si aún no se puede crear en Infobip, devolver None
+            print(f"[ChatOrchestrator] No se pudo obtener person_id de Infobip para: {telefono}")
+            return None
+            
+        except Exception as e:
+            print(f"[ChatOrchestrator] Error en create_or_find_person: {e}")
+            return None
+    
     def get_rdv_by_external_id(self, external_id: str) -> Optional[Dict[str, Any]]:
         """
         Consulta RDV por infobip_external_id usando el servicio interno
@@ -173,7 +255,7 @@ class ChatOrchestrator:
         if not person_id or person_id == "":
             print("[ChatOrchestrator] No se recibió person_id. Iniciando flujo de creación de persona...")
             if telefono_usuario:
-                person_id = InfobipService.create_person_with_phone(telefono_usuario)
+                person_id = self.create_or_find_person(telefono_usuario)
             else:
                 print("[ChatOrchestrator] No hay teléfono de usuario para crear persona.")
         else:
