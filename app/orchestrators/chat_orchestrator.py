@@ -110,6 +110,8 @@ class ChatOrchestrator:
             infobip_person_id = InfobipService.create_person_with_phone(telefono)
             
             if infobip_person_id:
+                # Asegurar que infobip_id sea string (Pydantic espera str)
+                infobip_person_id = str(infobip_person_id)
                 print(f"[ChatOrchestrator] Persona obtenida de Infobip: {infobip_person_id}")
                 # Buscar o crear el people local
                 local_people = PeopleService.get_by_phone(self.db, telefono)
@@ -141,12 +143,16 @@ class ChatOrchestrator:
             if infobip_person_data:
                 # Crear registro local con datos completos de Infobip
                 from app.schemas.people_ext import PeopleExtCreateFlexible
-                
+                # cast id to string to satisfy pydantic string_type
+                infobip_id_str = None
+                if infobip_person_data.get("id") is not None:
+                    infobip_id_str = str(infobip_person_data.get("id"))
+
                 people_create = PeopleExtCreateFlexible(
                     party_id=infobip_person_data.get("party_id"),
                     party_number=infobip_person_data.get("party_number"),
                     telefono=telefono,
-                    infobip_id=infobip_person_data.get("id")
+                    infobip_id=infobip_id_str
                 )
                 
                 new_people = PeopleService.create_flexible(self.db, people_create)
@@ -170,10 +176,11 @@ class ChatOrchestrator:
                 infobip_person_id = InfobipService.create_person_with_phone(telefono)
                 
                 if infobip_person_id:
-                    new_people.infobip_id = infobip_person_id
+                    # Guardar como string
+                    new_people.infobip_id = str(infobip_person_id)
                     self.db.commit()
                     print(f"[ChatOrchestrator] Actualizado con infobip_id: {infobip_person_id}")
-                    return infobip_person_id, new_people
+                    return str(infobip_person_id), new_people
                 else:
                     return None, new_people
             
