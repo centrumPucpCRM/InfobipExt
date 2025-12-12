@@ -390,23 +390,24 @@ class ConversationService:
                     MensajeExt.id_conversation == id_conversation,
                     MensajeExt.tipo == "NOTE"
                 ).all()
+                # Dni Cliente: 7737373
+                # Codigo programa: 46546465 
+                # Nombre Programa: NOmbre XYZ
+                #->46546465
+                patron = re.compile(r"Codigo\s+programa\s*:\s*([^\r\n]+)", re.IGNORECASE)
 
-                # Patrones que soportamos:
-                # - "NuevoPrograma - Nombre... - OPE: 300000..."
-                # - "NuevoPrograma: 100000..."
-                # - "Programa: 100000..."
-                # - "... OPE: 300000..."
-                patron = re.compile(r"OPE:\s*(\d+)|NuevoPrograma(?:\s*-\s*[^:]+)?\s*:\s*(\d+)|Programa\s*:\s*(\d+)")
+                
 
                 for nota in notas:
                     if not nota.contenido:
                         continue
+                    # Buscar todas las apariciones dentro de la nota
                     for m in patron.findall(nota.contenido):
-                        # m es una tupla con 3 grupos, tomar el que no esté vacío
+                        # m es una tupla con hasta 4 grupos; escoger el primero no vacío
                         codigo = None
                         for grp in m:
                             if grp:
-                                codigo = grp
+                                codigo = grp.strip()
                                 break
                         if codigo:
                             if codigo not in programas_encontrados:
