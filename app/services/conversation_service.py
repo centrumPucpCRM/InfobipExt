@@ -490,11 +490,10 @@ class ConversationService:
                         }
                         try:
                             client.post(url_nota, headers=headers_infobip, json=payload_nota, timeout=10.0)
-                        except Exception:
-                            # best-effort: do not block on note failure
-                            pass
-                    except Exception:
-                        pass
+                        except Exception as e:
+                            print("Error:",e)
+                    except Exception as e:
+                        print("Error:",e)
 
                     return {
                         "success": False,
