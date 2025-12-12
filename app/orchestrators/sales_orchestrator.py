@@ -894,7 +894,7 @@ class SalesOrchestrator:
                 if codigo_crm:
                     nombre_programa = self._obtener_nombre_programa(codigo_crm)
                     if nombre_programa:
-                        self._agregar_nota_conversacion(conversation_id, f"Dni Cliente: {osc.get("osc_people_dni")}\nCodigo programa: {codigo_crm}\nNombre programa: {nombre_programa}")
+                            self._agregar_nota_conversacion(conversation_id, f"Dni Cliente: {osc.get('osc_people_dni')}\nCodigo programa: {codigo_crm}\nNombre programa: {nombre_programa}")
                     else:
                         self._agregar_nota_conversacion(conversation_id, f"Programa: {codigo_crm}")
                 
@@ -938,7 +938,7 @@ class SalesOrchestrator:
             if codigo_crm:
                 nombre_programa = self._obtener_nombre_programa(codigo_crm)
                 if nombre_programa:
-                        self._agregar_nota_conversacion(conversation_id, f"Dni Cliente: {osc.get("osc_people_dni")}\nCodigo programa: {codigo_crm}\nNombre programa: {nombre_programa}")
+                        self._agregar_nota_conversacion(conversation_id, f"Dni Cliente: {osc.get('osc_people_dni')}\nCodigo programa: {codigo_crm}\nNombre programa: {nombre_programa}")
                 else:
                     self._agregar_nota_conversacion(conversation_id, f"NuevoPrograma: {codigo_crm}")
             
