@@ -552,8 +552,8 @@ class ConversationService:
             # Intentar publicar nota de fallo en Infobip (best-effort)
             try:
                 nota_text = (
-                    f"Actualización de etapa en Oracle: FALLIDA. Lead: {lead_id}. Etapa intentada: {etapa}."
-                    f" Error: {e.response.status_code} - {e.response.text}"
+                    f"Error al actualizar el lead\n"
+                    f" Mensaje de error: {str(e)}"
                 )
                 url_nota = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{id_conversation}/notes"
                 payload_nota = {"content": nota_text}
@@ -579,8 +579,8 @@ class ConversationService:
             # Intentar publicar nota de fallo inesperado en Infobip (best-effort)
             try:
                 nota_text = (
-                    f"Actualización de etapa en Oracle: FALLIDA (error inesperado). Lead: {lead_id}. Etapa intentada: {etapa}."
-                    f" Error: {str(e)}"
+                    f"Error al actualizar el lead\n"
+                    f" Mensaje de error: {str(e)}"
                 )
                 url_nota = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{id_conversation}/notes"
                 payload_nota = {"content": nota_text}
