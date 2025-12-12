@@ -389,6 +389,48 @@ class SalesOrchestrator:
             return items[0].get("ProductGroupName")
         except Exception:
             return None
+
+    def obtener_nombre_por_dni(self, numero_doc: str) -> Optional[str]:
+        """
+        Consulta Oracle Contacts por número de documento (DNI) y devuelve el
+        `ContactName`.
+
+        Args:
+            numero_doc: DNI / número de documento a buscar
+
+        Returns:
+            El nombre del contacto (`ContactName`) si se encuentra, o `None`.
+        """
+        try:
+            base_url = f"{settings.ORACLE_CRM_URL}/contacts"
+            headers = {
+                "Authorization": settings.ORACLE_CRM_AUTH,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+            params = {
+                "onlyData": "true",
+                "fields": "ContactName",
+                "q": f"PersonDEO_CTRNrodedocumento_c={numero_doc}",
+                "limit": 1,
+            }
+
+            resp = requests.get(base_url, headers=headers, params=params, timeout=10)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            items = data.get("items") or []
+            if not items:
+                return None
+            nombre = items[0].get("ContactName")
+            # Imprimir el nombre (según lo solicitado)
+            try:
+                print(nombre)
+            except Exception:
+                pass
+            return nombre
+        except Exception:
+            return None
     
     def buscar_people_telefono(
         self,
@@ -893,10 +935,23 @@ class SalesOrchestrator:
                 codigo_crm = osc.get("osc_conversation_codigo_crm")
                 if codigo_crm:
                     nombre_programa = self._obtener_nombre_programa(codigo_crm)
-                    if nombre_programa:
-                            self._agregar_nota_conversacion(conversation_id, f"Dni Cliente: {osc.get('osc_people_dni')}\nCodigo programa: {codigo_crm}\nNombre programa: {nombre_programa}")
-                    else:
-                        self._agregar_nota_conversacion(conversation_id, f"Programa: {codigo_crm}")
+                    # Obtener el nombre del cliente por DNI (best-effort)
+                    nombre_cliente = None
+                    try:
+                        nombre_cliente = self.obtener_nombre_por_dni(osc.get('osc_people_dni'))
+                        if nombre_cliente:
+                            print(f"Nombre cliente: {nombre_cliente}")
+                    except Exception:
+                        nombre_cliente = None
+
+                    nombre_programa_text = nombre_programa or ""
+                    nota = (
+                        f"Dni Cliente: {osc.get('osc_people_dni')}\n"
+                        f"Nombre Cliente: {nombre_cliente or ''}\n"
+                        f"Codigo programa: {codigo_crm}\n"
+                        f"Nombre Programa: {nombre_programa_text}"
+                    )
+                    self._agregar_nota_conversacion(conversation_id, nota)
                 
                 # 5. Agregar nota con el vendedor (party_number del RDV)
                 if rdv_party_number:
@@ -937,17 +992,30 @@ class SalesOrchestrator:
             codigo_crm = osc.get("osc_conversation_codigo_crm")
             if codigo_crm:
                 nombre_programa = self._obtener_nombre_programa(codigo_crm)
-                if nombre_programa:
-                        self._agregar_nota_conversacion(conversation_id, f"Dni Cliente: {osc.get('osc_people_dni')}\nCodigo programa: {codigo_crm}\nNombre programa: {nombre_programa}")
-                else:
-                    self._agregar_nota_conversacion(conversation_id, f"NuevoPrograma: {codigo_crm}")
+                # Obtener e imprimir el nombre del cliente por DNI (best-effort)
+                nombre_cliente = None
+                try:
+                    nombre_cliente = self.obtener_nombre_por_dni(osc.get('osc_people_dni'))
+                    if nombre_cliente:
+                        print(f"Nombre cliente: {nombre_cliente}")
+                except Exception:
+                    nombre_cliente = None
+
+                nombre_programa_text = nombre_programa or ""
+                nota = (
+                    f"Dni Cliente: {osc.get('osc_people_dni')}\n"
+                    f"Nombre Cliente: {nombre_cliente or ''}\n"
+                    f"Codigo programa: {codigo_crm}\n"
+                    f"Nombre Programa: {nombre_programa_text}"
+                )
+                self._agregar_nota_conversacion(conversation_id, nota)
             
             # 4. Agregar nota con el nuevo vendedor
             if rdv_party_number:
                 if seller_name:
-                    self._agregar_nota_conversacion(conversation_id, f"NuevoVendedor {seller_name}:{rdv_party_number}")
+                    self._agregar_nota_conversacion(conversation_id, f"Vendedor {seller_name}:{rdv_party_number}")
                 else:
-                    self._agregar_nota_conversacion(conversation_id, f"NuevoVendedor:{rdv_party_number}")
+                    self._agregar_nota_conversacion(conversation_id, f"Vendedor:{rdv_party_number}")
             
             # 5. Reasignar conversación al nuevo agente
             if agente_external_id:
