@@ -514,9 +514,15 @@ class ConversationService:
                 oracle_response = response_patch.json()
                 # Publicar nota en Infobip indicando éxito (best-effort)
                 try:
+                    # Mapear etapa a descripción amigable
+                    etapa_descripcion = {
+                        "COOL": "Poco Prometedora",
+                        "WARM": "Medianamente Prometedora",
+                        "HOT": "Altamente Prometedora"
+                    }.get(etapa, etapa)
                     nota_text = (
-                        f"Actualización de etapa en Oracle: EXITOSA. Lead: {lead_id}. Etapa: {etapa}."
-                        f" Comentario agregado: {nuevo_comentario}"
+                        f"Se calificó correctamente en el CRM.\nNueva Clasificación: {etapa_descripcion}.\n"
+                        f"Observación agregada: {nuevo_comentario}"
                     )
                     url_nota = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{id_conversation}/notes"
                     payload_nota = {"content": nota_text}
