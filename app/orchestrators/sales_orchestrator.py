@@ -1183,7 +1183,7 @@ class SalesOrchestrator:
             
             # 4. Verificar si está en estado OPEN o WAITING
             estado = conversacion_infobip.get("status")
-            if estado in ["OPEN", "WAITING"]:
+            if estado in ["OPEN", "WAITING","RESOLVED"]:
                 return conversacion_infobip
             
             return None
