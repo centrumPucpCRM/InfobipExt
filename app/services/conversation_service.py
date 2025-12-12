@@ -521,7 +521,7 @@ class ConversationService:
                         "HOT": "Prometedora"
                     }.get(etapa, etapa)
                     nota_text = (
-                        f"Se calificó correctamente en el CRM.\nNueva Clasificación: {etapa_descripcion}.\n"
+                        f"Se clasificó correctamente en el CRM.\nNueva Clasificación: {etapa_descripcion}.\n"
                         f"Observación agregada: {nuevo_comentario}"
                     )
                     url_nota = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{id_conversation}/notes"
