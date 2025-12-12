@@ -479,7 +479,7 @@ class ConversationService:
                 if lead_data.get("StatusCode", "") == 'CONVERTED':
                     try:
                         nota_text = (
-                            f"Actualización de etapa en CRM: NO se actualizó. Lead {lead_id} ya está convertido."
+                            f"El lead no se actualizo por que ya está convertido."
                         )
                         url_nota = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{id_conversation}/notes"
                         payload_nota = {"content": nota_text}
