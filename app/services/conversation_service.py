@@ -518,7 +518,7 @@ class ConversationService:
                     etapa_descripcion = {
                         "COOL": "Poco Prometedora",
                         "WARM": "Medianamente Prometedora",
-                        "HOT": "Altamente Prometedora"
+                        "HOT": "Prometedora"
                     }.get(etapa, etapa)
                     nota_text = (
                         f"Se calificó correctamente en el CRM.\nNueva Clasificación: {etapa_descripcion}.\n"
