@@ -559,25 +559,16 @@ class SalesOrchestrator:
                     if(OT_valido == False):
                         # [Existe Match Party] + [Existe Match Teléfono] + [Teléfonos Diferentes] + [Teléfono Oracle INVÁLIDO]
                         comentario = (
-                            f"[Existe Match Party] + [Existe Match Teléfono] + [Teléfonos Diferentes] + [Teléfono Oracle INVÁLIDO]\n\n"
-                            f"Cliente DNI: {osc_people_dni}\n"
-                            f"Teléfono enviado por Oracle: {osc_people_telefono} (INVÁLIDO)\n"
-                            f"Teléfono registrado en Party: {MatchParty['telefono']}\n"
-                            f"Teléfono encontrado por búsqueda: {MatchTelefono['telefono']}\n\n"
-                            f"Acción: El número del lead no es válido. Se usará el registro encontrado por Party con el teléfono ya registrado."
+                            f"El telefono enviado por el postulante es incorrecto.\n"
+                            f"Se usara el registrado en el CRM"
                         )
                         MatchParty["comentario"] = comentario
                         people_a_usar = MatchParty
                     elif(OT_valido == True):
                         # [Existe Match Party] + [Existe Match Teléfono] + [Teléfonos Diferentes] + [Teléfono Oracle VÁLIDO]
                         comentario = (
-                            f"[Existe Match Party] + [Existe Match Teléfono] + [Teléfonos Diferentes] + [Teléfono Oracle VÁLIDO]\n\n"
-                            f"Cliente DNI: {osc_people_dni}\n"
-                            f"Teléfono enviado por Oracle: {osc_people_telefono} (VÁLIDO)\n"
-                            f"Teléfono registrado en Party: {MatchParty['telefono']}\n"
-                            f"Teléfono encontrado por búsqueda: {MatchTelefono['telefono']}\n\n"
-                            f"Acción: Se usará el registro por MatchTelefono (ID: {MatchTelefono['id']}) para iniciar la conversación.\n"
-                            f"Revisar: Por favor revisar a cuál de los dos le pertenece realmente el teléfono y actualizarlo si es necesario."
+                            "El teléfono enviado es válido, pero hay inconsistencias entre los contactos.\n"
+                            "Puede continuar la conversacion, por favor de notificar al administrador."
                         )
                         MatchTelefono["comentario"] = comentario
                         people_a_usar = MatchTelefono
@@ -585,12 +576,8 @@ class SalesOrchestrator:
                 elif(MatchParty["telefono"] == MatchTelefono["telefono"]):
                     # [Existe Match Party] + [Existe Match Teléfono] + [Teléfonos Coinciden]
                     comentario = (
-                        f"[Existe Match Party] + [Existe Match Teléfono] + [Teléfonos Coinciden]\n\n"
-                        f"Cliente DNI: {osc_people_dni}\n"
-                        f"Teléfono enviado por Oracle: {osc_people_telefono}\n"
-                        f"Teléfono registrado en Party: {MatchParty['telefono']}\n"
-                        f"Teléfono encontrado por búsqueda: {MatchTelefono['telefono']}\n\n"
-                        f"Acción: Los teléfonos coinciden. Se usará el registro por Party."
+                        "El teléfono proporcionado es correcto y coincide con el registrado.\n"
+                        "Puedes continuar con la conversación."
                     )
                     MatchParty["comentario"] = comentario
                     people_a_usar = MatchParty
@@ -599,34 +586,27 @@ class SalesOrchestrator:
                 if(MatchParty["telefono"] == osc_people_telefono):
                     # [Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Party = Teléfono Oracle]
                     comentario = (
-                        f"[Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Party = Teléfono Oracle]\n\n"
-                        f"Cliente DNI: {osc_people_dni}\n"
-                        f"Teléfono enviado por Oracle: {osc_people_telefono}\n"
-                        f"Teléfono registrado en Party: {MatchParty['telefono']}\n\n"
-                        f"Acción: Los teléfonos coinciden. Se usará el registro por Party."
+                        "El teléfono proporcionado es correcto y coincide con el registrado.\n"
+                        "Puedes continuar con la conversación."
                     )
+                    MatchParty["telefono_actualizado"] = osc_people_telefono  # Nuevo teléfono a actualizar
+                    MatchParty["actividad"] = "Update"
                     MatchParty["comentario"] = comentario
                     people_a_usar = MatchParty
                 elif(MatchParty["telefono"] != osc_people_telefono):
                     if(OT_valido == False):
                         # [Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Party ≠ Teléfono Oracle] + [Teléfono Oracle INVÁLIDO]
                         comentario = (
-                            f"[Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Party ≠ Teléfono Oracle] + [Teléfono Oracle INVÁLIDO]\n\n"
-                            f"Cliente DNI: {osc_people_dni}\n"
-                            f"Teléfono enviado por Oracle: {osc_people_telefono} (INVÁLIDO)\n"
-                            f"Teléfono registrado en Party: {MatchParty['telefono']}\n\n"
-                            f"Acción: El teléfono de Oracle no es válido. Se usará el teléfono anterior registrado en Party."
+                            f"El telefono enviado por el postulante es incorrecto.\n"
+                            f"Se usara el registrado en el CRM"
                         )
                         MatchParty["comentario"] = comentario
                         people_a_usar = MatchParty
                     elif(OT_valido == True):
                         # [Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Party ≠ Teléfono Oracle] + [Teléfono Oracle VÁLIDO]
                         comentario = (
-                            f"[Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Party ≠ Teléfono Oracle] + [Teléfono Oracle VÁLIDO]\n\n"
-                            f"Cliente DNI: {osc_people_dni}\n"
-                            f"Teléfono enviado por Oracle: {osc_people_telefono} (VÁLIDO)\n"
-                            f"Teléfono anterior en Party: {MatchParty['telefono']}\n\n"
-                            f"Acción: Se actualizará el teléfono del cliente con el nuevo número válido de Oracle."
+                            "El teléfono proporcionado es correcto y coincide con el registrado.\n"
+                            "Puedes continuar con la conversación."
                         )
                         MatchParty["comentario"] = comentario
                         MatchParty["telefono_actualizado"] = osc_people_telefono  # Nuevo teléfono a actualizar
@@ -659,26 +639,20 @@ class SalesOrchestrator:
                     )
                     if people_a_usar:
                         people_a_usar["comentario"] = (
-                            f"[NO Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Oracle VÁLIDO]\n\n"
-                            f"Cliente DNI: {osc_people_dni}\n"
-                            f"Teléfono: {osc_people_telefono} (VÁLIDO)\n"
-                            f"Party ID: {osc_people_party_id}\n"
-                            f"Party Number: {osc_people_party_number}\n\n"
-                            f"Acción: Se creó nuevo registro en Infobip y BD local."
+                            "El teléfono proporcionado es correcto.\n"
+                            "Puedes continuar con la conversación."
                         )
 
                 elif(OT_valido == False):
                     # [NO Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Oracle INVÁLIDO] → FALLO + CORREO
                     correo_asunto = f"Notificación Infobip - Cliente DNI: {osc_people_dni} - No se pudo crear conversación"
                     correo_cuerpo = (
-                        f"[NO Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Oracle INVÁLIDO]\n\n"
                         f"No fue posible crear la conversación para el cliente con DNI: {osc_people_dni}\n\n"
                         f"Teléfono enviado por Oracle: {osc_people_telefono} (INVÁLIDO)\n"
-                        f"Party ID: {osc_people_party_id}\n"
-                        f"Party Number: {osc_people_party_number}\n\n"
-                        f"Motivo: No se encontró ningún registro en Infobip (ni por Party ni por Teléfono) "
-                        f"y el número de teléfono proporcionado no es válido.\n\n"
-                        f"Acción requerida: Por favor verificar y corregir el número de teléfono del cliente en Oracle Sales Cloud."
+                        f"Codigo del programa: {osc_conversation_codigo_crm}\n"
+                        f"Motivo: No se encontró ningún registro en Infobip (ni por CRM ni por Teléfono enviado por el postulante)\n"
+                        f"Acción requerida: Por favor verificar y corregir el número de teléfono del cliente en Oracle Sales Cloud.\n"
+                        f"Debe generar la conversacion en infobip, no se generara automaticamente\n"
                     )
                     
                     # Enviar correo SOLO si el RDV tiene correo configurado
@@ -720,13 +694,8 @@ class SalesOrchestrator:
             elif(MatchTelefono != None): # NO Existe Match por Party + Existe Match por Teléfono
                 # [NO Existe Match Party] + [Existe Match Teléfono]
                 comentario = (
-                    f"[NO Existe Match Party] + [Existe Match Teléfono]\n\n"
-                    f"Cliente DNI: {osc_people_dni}\n"
-                    f"No se encontró usuario registrado por Party ID/Number.\n"
-                    f"Teléfono enviado por Oracle: {osc_people_telefono}\n"
-                    f"Teléfono encontrado por búsqueda: {MatchTelefono['telefono']}\n\n"
-                    f"Acción: Se usará el registro encontrado por teléfono (ID: {MatchTelefono['id']}) para iniciar la conversación.\n"
-                    f"Revisar: Por favor verificar a cuál cliente le pertenece realmente este teléfono."
+                    "El teléfono enviado es válido, pero actualmente está asociado a otro contacto en el CRM.\n"
+                    "Por favor, revisa y actualiza la información en el CRM si es necesario para evitar confusiones."
                 )
                 MatchTelefono["comentario"] = comentario
                 people_a_usar = MatchTelefono
