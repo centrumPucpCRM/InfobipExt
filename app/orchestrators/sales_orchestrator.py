@@ -532,6 +532,7 @@ class SalesOrchestrator:
             osc_people_telefono = telefono_normalizado
         print(osc_people_telefono)
         osc_conversation_lead_id = self.obtenerLeadIdPorNumber(osc_conversation_lead_id)  # Me estan pasando el leadnumber en ves de el lead id
+        print(osc_conversation_lead_id)
         if osc_rdv_party_number is None:
            osc_rdv_party_number = self.obtenerPartyNumberRDV(osc_rdv_party_id)
 

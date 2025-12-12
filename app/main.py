@@ -15,10 +15,17 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-# Configuración de CORS - Solo para IPs autorizadas
+# Configuración de CORS - Leer orígenes desde .env (via `ALLOWED_ORIGINS`)
+# Si en el .env pones un único origen "*" se permitirá cualquier origen.
+raw_allowed = [o.strip() for o in settings.get_allowed_origins() if o and o.strip()]
+if any(o == "*" for o in raw_allowed):
+    allow_origins = ["*"]
+else:
+    allow_origins = raw_allowed
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_allowed_origins(),  # Solo orígenes específicos
+    allow_origins=allow_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
