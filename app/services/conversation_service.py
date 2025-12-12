@@ -463,7 +463,7 @@ class ConversationService:
         }
         params_get = {
             "onlyData": "true",
-            "fields": "CTRObservacionesActiv_c"
+            "fields": "CTRObservacionesActiv_c,StatusCode"
         }
         
         try:
@@ -475,7 +475,32 @@ class ConversationService:
                 
                 # Obtener observaciones anteriores
                 observaciones_anteriores = lead_data.get("CTRObservacionesActiv_c", "") or ""
-                
+                # If the lead is already converted, post a note in Infobip (best-effort)
+                if lead_data.get("StatusCode", "") == 'CONVERTED':
+                    try:
+                        nota_text = (
+                            f"Actualización de etapa en CRM: NO se actualizó. Lead {lead_id} ya está convertido."
+                        )
+                        url_nota = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{id_conversation}/notes"
+                        payload_nota = {"content": nota_text}
+                        headers_infobip = {
+                            "Authorization": f"App {settings.INFOBIP_API_KEY}",
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        }
+                        try:
+                            client.post(url_nota, headers=headers_infobip, json=payload_nota, timeout=10.0)
+                        except Exception:
+                            # best-effort: do not block on note failure
+                            pass
+                    except Exception:
+                        pass
+
+                    return {
+                        "success": False,
+                        "message": f"No se puede actualizar el lead {lead_id}: ya está convertido",
+                        "lead_id": lead_id
+                    }
                 # 3. Construir nuevo comentario con fecha
                 fecha_actual = datetime.now().strftime("%d.%m.%Y")
                 nuevo_comentario = f"{fecha_actual} - {comentario}" if comentario else ""
