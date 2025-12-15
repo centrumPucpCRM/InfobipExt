@@ -926,22 +926,47 @@ class SalesOrchestrator:
             if nueva_conversacion and nueva_conversacion.get("id"):
                 conversation_id = nueva_conversacion.get("id")
                 # Enviar plantilla WhatsApp inmediatamente después de crear la conversación (best-effort)
-                try:
-                    # Llamada simplificada: delegar construcción de parámetros
-                    resp_template = self.enviar_template_conversacion(
-                        to_number=telefono_final,
-                        conversation_id=conversation_id,
-                        template_name="robot_saludo_automatico",
-                        seller_name=seller_name,
-                        codigo_crm=osc.get('osc_conversation_codigo_crm'),
-                        from_number=None,
-                        agent_id=agente_external_id,
-                        language="es_PE",
-                    )
-                    print(f"enviar_template_conversacion (post-creacion) result: {resp_template}")
-                except Exception as e:
-                    print(f"Error llamando enviar_template_conversacion (post-creacion): {e}")
-                
+
+
+                # Enviar plantilla (simple) para la conversación existente
+                # Comprobar si el lead_id que viene desde OSC ya existe en la tabla local `conversation_ext`.
+                # Si existe, OMITIR el envío de la plantilla; si no existe, enviarla.
+                lead_id = osc.get('osc_conversation_lead_id')
+                enviar_plantilla = True
+                if lead_id:
+                    try:
+                        from app.models.conversation_ext import ConversationExt
+
+                        existe = (
+                            self.db.query(ConversationExt)
+                            .filter(ConversationExt.lead_id == lead_id)
+                            .first()
+                        )
+                        if existe:
+                            enviar_plantilla = False
+                            print(f"Lead {lead_id} ya existe en conversation_ext; se omite envio de plantilla.")
+                    except Exception as e:
+                        # Si hay un error consultando la BD, registrarlo y continuar con el envío
+                        print(f"Error consultando conversation_ext por lead_id {lead_id}: {e}")
+
+                if enviar_plantilla:
+                    try:
+                        resp_template = self.enviar_template_conversacion(
+                            to_number=telefono_final,
+                            conversation_id=conversation_id,
+                            template_name="robot_saludo_automatico",
+                            seller_name=seller_name,
+                            codigo_crm=osc.get('osc_conversation_codigo_crm'),
+                            from_number=None,
+                            agent_id=agente_external_id,
+                            language="es_PE",
+                        )
+                        print(f"enviar_template_conversacion (existing) result: {resp_template}")
+                    except Exception as e:
+                        print(f"Error llamando enviar_template_conversacion (existing): {e}")
+
+
+
                 # 3. Agregar nota con el comentario del flujo
                 comentario = people_a_usar.get("comentario", "")
                 if comentario:
