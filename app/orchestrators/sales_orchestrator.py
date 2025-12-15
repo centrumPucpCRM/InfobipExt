@@ -916,7 +916,7 @@ class SalesOrchestrator:
             # No hay conversación activa → Crear nueva conversación
             
             # 2. Crear conversación en Infobip
-            topic_str = f"Dni: {osc.get('osc_people_dni')} Telefono: {telefono_final}"
+            topic_str = f"Dni: {osc.get('osc_people_dni')} Telefono: {telefono_final} Nombre: (completar)"
             nueva_conversacion = self._crear_conversacion_infobip(
                 telefono=telefono_final,
                 agente_external_id=agente_external_id,
