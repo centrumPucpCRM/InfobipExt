@@ -1069,17 +1069,6 @@ class SalesOrchestrator:
             if agente_external_id:
                 self._reasignar_conversacion_infobip(conversation_id, agente_external_id)
         
-            # 7. Guardar conversación en BD local
-            ConversationService.create_flexible(
-                db=self.db,
-                id_conversation=conversation_id,
-                id_people=id_people_local,
-                id_rdv=rdv_id_local,
-                estado_conversacion=conversacion_activa.get("status"),
-                telefono_creado=telefono_final,
-                codigo_crm=codigo_crm,
-                lead_id=osc.get("osc_conversation_lead_id")
-            )
             # Enviar plantilla (simple) para la conversación existente
             # Comprobar si el lead_id que viene desde OSC ya existe en la tabla local `conversation_ext`.
             # Si existe, OMITIR el envío de la plantilla; si no existe, enviarla.
@@ -1116,6 +1105,18 @@ class SalesOrchestrator:
                     print(f"enviar_template_conversacion (existing) result: {resp_template}")
                 except Exception as e:
                     print(f"Error llamando enviar_template_conversacion (existing): {e}")
+
+            # 7. Guardar conversación en BD local (después del envío de plantilla)
+            ConversationService.create_flexible(
+                db=self.db,
+                id_conversation=conversation_id,
+                id_people=id_people_local,
+                id_rdv=rdv_id_local,
+                estado_conversacion=conversacion_activa.get("status"),
+                telefono_creado=telefono_final,
+                codigo_crm=codigo_crm,
+                lead_id=osc.get("osc_conversation_lead_id")
+            )
         return {
             "success": True,
             "person_id": person_id,
