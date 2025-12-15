@@ -1433,6 +1433,8 @@ class SalesOrchestrator:
         from_number: Optional[str] = None,
         agent_id: Optional[str] = None,
         language: str = "es_PE",
+        seller_name: Optional[str] = None,
+        codigo_crm: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Envía un mensaje tipo TEMPLATE (WhatsApp) dentro de una conversación existente en Infobip.
@@ -1449,6 +1451,22 @@ class SalesOrchestrator:
             if agent_id:
                 headers["x-agent-id"] = agent_id
 
+            # Construir parámetros si no se pasaron explícitamente
+            if parameters is None:
+                nombre_programa = None
+                try:
+                    if codigo_crm:
+                        nombre_programa = self._obtener_nombre_programa(codigo_crm)
+                except Exception:
+                    nombre_programa = None
+
+                parameters_payload = {
+                    "{{1}}": seller_name or "",
+                    "{{2}}": nombre_programa or "",
+                }
+            else:
+                parameters_payload = parameters
+
             payload = {
                 "from": from_number or "",
                 "to": to_number,
@@ -1457,7 +1475,7 @@ class SalesOrchestrator:
                 "content": {
                     "templateName": template_name,
                     "language": language,
-                    "parameters": [parameters or {}]
+                    "parameters": [parameters_payload]
                 }
             }
 
