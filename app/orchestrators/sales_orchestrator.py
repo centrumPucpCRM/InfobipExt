@@ -1048,6 +1048,21 @@ class SalesOrchestrator:
                 codigo_crm=codigo_crm,
                 lead_id=osc.get("osc_conversation_lead_id")
             )
+            # Enviar plantilla (simple) para la conversación existente
+            try:
+                resp_template = self.enviar_template_conversacion(
+                    to_number=telefono_final,
+                    conversation_id=conversation_id,
+                    template_name="robot_saludo_automatico",
+                    seller_name=seller_name,
+                    codigo_crm=osc.get('osc_conversation_codigo_crm'),
+                    from_number=None,
+                    agent_id=agente_external_id,
+                    language="es_PE",
+                )
+                print(f"enviar_template_conversacion (existing) result: {resp_template}")
+            except Exception as e:
+                print(f"Error llamando enviar_template_conversacion (existing): {e}")
         return {
             "success": True,
             "person_id": person_id,
@@ -1418,35 +1433,13 @@ class SalesOrchestrator:
         from_number: Optional[str] = None,
         agent_id: Optional[str] = None,
         language: str = "es_PE",
-        seller_name: Optional[str] = None,
-        codigo_crm: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Envía un mensaje tipo TEMPLATE (WhatsApp) dentro de una conversación existente en Infobip.
 
-        Si `parameters` no se provee, intentará construirlos internamente usando
-        `seller_name` para `{{1}}` y `codigo_crm` para resolver el nombre de programa
-        que se usará en `{{2}}` (consulta a Oracle mediante `_obtener_nombre_programa`).
-
         Retorna un diccionario con `success`, `status_code` y `body` o `error`.
         """
         try:
-            # Construir parámetros si no vienen desde el llamador
-            if parameters is None:
-                nombre_programa = None
-                try:
-                    if codigo_crm:
-                        nombre_programa = self._obtener_nombre_programa(codigo_crm)
-                except Exception:
-                    nombre_programa = None
-
-                parameters_payload = {
-                    "{{1}}": seller_name or "",
-                    "{{2}}": nombre_programa or "",
-                }
-            else:
-                parameters_payload = parameters
-
             url = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{conversation_id}/messages"
             headers = {
                 "Authorization": f"App {settings.INFOBIP_API_KEY}",
@@ -1464,7 +1457,7 @@ class SalesOrchestrator:
                 "content": {
                     "templateName": template_name,
                     "language": language,
-                    "parameters": [parameters_payload]
+                    "parameters": [parameters or {}]
                 }
             }
 
