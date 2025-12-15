@@ -995,6 +995,13 @@ class SalesOrchestrator:
         elif conversacion_activa is not None:
             # Existe conversación activa → Actualizar conversación
             conversation_id = conversacion_activa.get("id")
+
+            #Aca quiero que se obtengan todos los 
+# id	id_conversation	id_people	id_rdv	estado_conversacion	telefono_creado	proxima_sincronizacion	ultima_sincronizacion	codigo_crm	lead_id	created_at	updated_at
+# 276	bcbdfdb4-9968-4ccc-80f1-ece2fc3c3d95	63953	NULL	OPEN	51968352136	2025-12-11 15:14:19.319004	NULL	NULL	NULL	2025-12-10 15:14:19.319409	2025-12-10 15:14:19.31
+            
+            # Lo que quiero es que usando el lead_id que pasas de osc, consultes si ese lead id existe en la tabla rdv_ext, si existe que ya no cree el mensaje de enviar template conversation sino que si lo envie
+            #
             print(conversacion_activa)
             print("conversation_id",conversation_id)
 
@@ -1049,20 +1056,41 @@ class SalesOrchestrator:
                 lead_id=osc.get("osc_conversation_lead_id")
             )
             # Enviar plantilla (simple) para la conversación existente
-            try:
-                resp_template = self.enviar_template_conversacion(
-                    to_number=telefono_final,
-                    conversation_id=conversation_id,
-                    template_name="robot_saludo_automatico",
-                    seller_name=seller_name,
-                    codigo_crm=osc.get('osc_conversation_codigo_crm'),
-                    from_number=None,
-                    agent_id=agente_external_id,
-                    language="es_PE",
-                )
-                print(f"enviar_template_conversacion (existing) result: {resp_template}")
-            except Exception as e:
-                print(f"Error llamando enviar_template_conversacion (existing): {e}")
+            # Comprobar si el lead_id que viene desde OSC ya existe en la tabla local `conversation_ext`.
+            # Si existe, OMITIR el envío de la plantilla; si no existe, enviarla.
+            lead_id = osc.get('osc_conversation_lead_id')
+            enviar_plantilla = True
+            if lead_id:
+                try:
+                    from app.models.conversation_ext import ConversationExt
+
+                    existe = (
+                        self.db.query(ConversationExt)
+                        .filter(ConversationExt.lead_id == lead_id)
+                        .first()
+                    )
+                    if existe:
+                        enviar_plantilla = False
+                        print(f"Lead {lead_id} ya existe en conversation_ext; se omite envio de plantilla.")
+                except Exception as e:
+                    # Si hay un error consultando la BD, registrarlo y continuar con el envío
+                    print(f"Error consultando conversation_ext por lead_id {lead_id}: {e}")
+
+            if enviar_plantilla:
+                try:
+                    resp_template = self.enviar_template_conversacion(
+                        to_number=telefono_final,
+                        conversation_id=conversation_id,
+                        template_name="robot_saludo_automatico",
+                        seller_name=seller_name,
+                        codigo_crm=osc.get('osc_conversation_codigo_crm'),
+                        from_number=None,
+                        agent_id=agente_external_id,
+                        language="es_PE",
+                    )
+                    print(f"enviar_template_conversacion (existing) result: {resp_template}")
+                except Exception as e:
+                    print(f"Error llamando enviar_template_conversacion (existing): {e}")
         return {
             "success": True,
             "person_id": person_id,
