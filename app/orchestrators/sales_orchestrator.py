@@ -934,32 +934,34 @@ class SalesOrchestrator:
                 lead_id = osc.get('osc_conversation_lead_id')
                 enviar_plantilla = True
                 print(f"DEBUG: existing-conv check - lead_id={lead_id!r}, conversation_id={conversation_id}")
-                if lead_id:
-                    try:
-                        from app.models.conversation_ext import ConversationExt
+                try:
+                    from app.models.conversation_ext import ConversationExt
 
-                        rows = (
-                            self.db.query(ConversationExt)
-                            .filter(ConversationExt.lead_id == lead_id)
-                            .all()
-                        )
-                        print(f"DEBUG: found {len(rows)} conversation_ext rows for lead_id={lead_id}")
-                        if rows:
-                            sample = [
-                                {
-                                    'id': getattr(r, 'id', None),
-                                    'id_conversation': getattr(r, 'id_conversation', None),
-                                    'lead_id': getattr(r, 'lead_id', None),
-                                    'created_at': getattr(r, 'created_at', None),
-                                }
-                                for r in rows[:5]
-                            ]
-                            print(f"DEBUG: sample conversation_ext rows: {sample}")
-                            enviar_plantilla = False
-                            print(f"Lead {lead_id} ya existe en conversation_ext; se omite envio de plantilla.")
-                    except Exception as e:
-                        # Si hay un error consultando la BD, registrarlo y continuar con el envío
-                        print(f"Error consultando conversation_ext por lead_id {lead_id}: {e}")
+                    # Usar únicamente osc_conversation_lead_id (no buscar por conversation_id ni teléfono)
+                    rows = (
+                        self.db.query(ConversationExt)
+                        .filter(ConversationExt.lead_id == lead_id)
+                        .all()
+                    )
+                    print(f"DEBUG: found {len(rows)} conversation_ext rows for lead_id={lead_id}")
+
+                    if rows:
+                        sample = [
+                            {
+                                'id': getattr(r, 'id', None),
+                                'id_conversation': getattr(r, 'id_conversation', None),
+                                'lead_id': getattr(r, 'lead_id', None),
+                                'telefono_creado': getattr(r, 'telefono_creado', None),
+                                'created_at': getattr(r, 'created_at', None),
+                            }
+                            for r in rows[:5]
+                        ]
+                        print(f"DEBUG: sample conversation_ext rows: {sample}")
+                        enviar_plantilla = False
+                        print(f"Lead {lead_id} ya existe en conversation_ext; se omite envio de plantilla.")
+                except Exception as e:
+                    # Si hay un error consultando la BD, registrarlo y continuar con el envío
+                    print(f"Error consultando conversation_ext por lead_id {lead_id}: {e}")
 
             if enviar_plantilla:
                 try:
