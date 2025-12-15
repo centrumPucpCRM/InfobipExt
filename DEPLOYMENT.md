@@ -3,7 +3,7 @@ Cambios de codigo:
 ------------------
 Local:
 git add .
-git commit -m "Adaptando el json de entrada a lo que puede mandar OSC"
+git commit -m "New: Envio de templates de wsp"
 git push origin main
 ================================================================
 Desplegado:
