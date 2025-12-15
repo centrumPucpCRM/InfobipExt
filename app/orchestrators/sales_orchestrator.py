@@ -1467,8 +1467,11 @@ class SalesOrchestrator:
             else:
                 parameters_payload = parameters
 
+            # Asegurar que el campo 'from' no sea vacío (Infobip lo valida)
+            from_number_final = from_number or "51992948046"
+
             payload = {
-                "from": from_number or "",
+                "from": from_number_final,
                 "to": to_number,
                 "channel": "WHATSAPP",
                 "contentType": "TEMPLATE",
