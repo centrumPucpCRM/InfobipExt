@@ -933,37 +933,50 @@ class SalesOrchestrator:
                 # Si existe, OMITIR el envío de la plantilla; si no existe, enviarla.
                 lead_id = osc.get('osc_conversation_lead_id')
                 enviar_plantilla = True
+                print(f"DEBUG: existing-conv check - lead_id={lead_id!r}, conversation_id={conversation_id}")
                 if lead_id:
                     try:
                         from app.models.conversation_ext import ConversationExt
 
-                        existe = (
+                        rows = (
                             self.db.query(ConversationExt)
                             .filter(ConversationExt.lead_id == lead_id)
-                            .first()
+                            .all()
                         )
-                        if existe:
+                        print(f"DEBUG: found {len(rows)} conversation_ext rows for lead_id={lead_id}")
+                        if rows:
+                            sample = [
+                                {
+                                    'id': getattr(r, 'id', None),
+                                    'id_conversation': getattr(r, 'id_conversation', None),
+                                    'lead_id': getattr(r, 'lead_id', None),
+                                    'created_at': getattr(r, 'created_at', None),
+                                }
+                                for r in rows[:5]
+                            ]
+                            print(f"DEBUG: sample conversation_ext rows: {sample}")
                             enviar_plantilla = False
                             print(f"Lead {lead_id} ya existe en conversation_ext; se omite envio de plantilla.")
                     except Exception as e:
                         # Si hay un error consultando la BD, registrarlo y continuar con el envío
                         print(f"Error consultando conversation_ext por lead_id {lead_id}: {e}")
 
-                if enviar_plantilla:
-                    try:
-                        resp_template = self.enviar_template_conversacion(
-                            to_number=telefono_final,
-                            conversation_id=conversation_id,
-                            template_name="robot_saludo_automatico",
-                            seller_name=seller_name,
-                            codigo_crm=osc.get('osc_conversation_codigo_crm'),
-                            from_number=None,
-                            agent_id=agente_external_id,
-                            language="es_PE",
-                        )
-                        print(f"enviar_template_conversacion (existing) result: {resp_template}")
-                    except Exception as e:
-                        print(f"Error llamando enviar_template_conversacion (existing): {e}")
+            if enviar_plantilla:
+                try:
+                    print(f"DEBUG: sending template (existing) to={telefono_final} conversation_id={conversation_id} seller_name={seller_name!r} codigo_crm={osc.get('osc_conversation_codigo_crm')!r}")
+                    resp_template = self.enviar_template_conversacion(
+                        to_number=telefono_final,
+                        conversation_id=conversation_id,
+                        template_name="robot_saludo_automatico",
+                        seller_name=seller_name,
+                        codigo_crm=osc.get('osc_conversation_codigo_crm'),
+                        from_number=None,
+                        agent_id=agente_external_id,
+                        language="es_PE",
+                    )
+                    print(f"enviar_template_conversacion (existing) result: {resp_template}")
+                except Exception as e:
+                    print(f"Error llamando enviar_template_conversacion (existing): {e}")
 
 
 
@@ -1004,6 +1017,14 @@ class SalesOrchestrator:
 
                 
                 # 7. Guardar conversación en BD local
+                try:
+                    from app.models.conversation_ext import ConversationExt
+                    lead_check = osc.get("osc_conversation_lead_id")
+                    pre_rows = self.db.query(ConversationExt).filter(ConversationExt.lead_id == lead_check).all() if lead_check else []
+                    print(f"DEBUG: before save (new-conv) found {len(pre_rows)} conversation_ext rows for lead_id={lead_check}")
+                except Exception:
+                    print("DEBUG: before save (new-conv) could not query conversation_ext")
+
                 ConversationService.create_flexible(
                     db=self.db,
                     id_conversation=conversation_id,
@@ -1074,16 +1095,28 @@ class SalesOrchestrator:
             # Si existe, OMITIR el envío de la plantilla; si no existe, enviarla.
             lead_id = osc.get('osc_conversation_lead_id')
             enviar_plantilla = True
+            print(f"DEBUG: existing-branch check - lead_id={lead_id!r}, conversation_id={conversation_id}")
             if lead_id:
                 try:
                     from app.models.conversation_ext import ConversationExt
 
-                    existe = (
+                    rows = (
                         self.db.query(ConversationExt)
                         .filter(ConversationExt.lead_id == lead_id)
-                        .first()
+                        .all()
                     )
-                    if existe:
+                    print(f"DEBUG: found {len(rows)} conversation_ext rows for lead_id={lead_id}")
+                    if rows:
+                        sample = [
+                            {
+                                'id': getattr(r, 'id', None),
+                                'id_conversation': getattr(r, 'id_conversation', None),
+                                'lead_id': getattr(r, 'lead_id', None),
+                                'created_at': getattr(r, 'created_at', None),
+                            }
+                            for r in rows[:5]
+                        ]
+                        print(f"DEBUG: sample conversation_ext rows: {sample}")
                         enviar_plantilla = False
                         print(f"Lead {lead_id} ya existe en conversation_ext; se omite envio de plantilla.")
                 except Exception as e:
@@ -1092,6 +1125,7 @@ class SalesOrchestrator:
 
             if enviar_plantilla:
                 try:
+                    print(f"DEBUG: sending template (existing-branch) to={telefono_final} conversation_id={conversation_id} seller_name={seller_name!r} codigo_crm={osc.get('osc_conversation_codigo_crm')!r}")
                     resp_template = self.enviar_template_conversacion(
                         to_number=telefono_final,
                         conversation_id=conversation_id,
@@ -1107,6 +1141,14 @@ class SalesOrchestrator:
                     print(f"Error llamando enviar_template_conversacion (existing): {e}")
 
             # 7. Guardar conversación en BD local (después del envío de plantilla)
+            try:
+                from app.models.conversation_ext import ConversationExt
+                lead_check = osc.get("osc_conversation_lead_id")
+                pre_rows = self.db.query(ConversationExt).filter(ConversationExt.lead_id == lead_check).all() if lead_check else []
+                print(f"DEBUG: before save (existing-conv) found {len(pre_rows)} conversation_ext rows for lead_id={lead_check}")
+            except Exception:
+                print("DEBUG: before save (existing-conv) could not query conversation_ext")
+
             ConversationService.create_flexible(
                 db=self.db,
                 id_conversation=conversation_id,
