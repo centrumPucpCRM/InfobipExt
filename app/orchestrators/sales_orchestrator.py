@@ -686,11 +686,13 @@ class SalesOrchestrator:
                         )
 
                 elif(OT_valido == False):
+                    
                     # [NO Existe Match Party] + [NO Existe Match Teléfono] + [Teléfono Oracle INVÁLIDO] → FALLO + CORREO
                     correo_asunto = f"Notificación Infobip - Cliente DNI: {osc_people_dni} - No se pudo crear conversación"
                     correo_cuerpo = (
                         f"No fue posible crear la conversación para el cliente con DNI: {osc_people_dni}\n\n"
                         f"Teléfono enviado por Oracle: {osc_people_telefono} (INVÁLIDO)\n"
+                        f"Nombre del programa: {self._obtener_nombre_programa(osc_conversation_codigo_crm)}\n"
                         f"Codigo del programa: {osc_conversation_codigo_crm}\n"
                         f"Motivo: No se encontró ningún registro en Infobip (ni por CRM ni por Teléfono enviado por el postulante)\n"
                         f"Acción requerida: Por favor verificar y corregir el número de teléfono del cliente en Oracle Sales Cloud.\n"
