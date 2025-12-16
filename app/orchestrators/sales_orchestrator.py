@@ -695,7 +695,7 @@ class SalesOrchestrator:
                         f"Nombre del programa: {self._obtener_nombre_programa(osc_conversation_codigo_crm)}\n"
                         f"Codigo del programa: {osc_conversation_codigo_crm}\n"
                         f"Motivo: No se encontró ningún registro en Infobip (ni por CRM ni por Teléfono enviado por el postulante)\n"
-                        f"Acción requerida: Por favor verificar y corregir el número de teléfono del cliente en Oracle Sales Cloud.\n"
+                        f"Acción requerida: Por favor verificar y corregir el número de teléfono del cliente en CRM.\n"
                         f"Debe generar la conversacion en infobip, no se generara automaticamente\n"
                     )
                     
