@@ -564,13 +564,22 @@ class SalesOrchestrator:
             osc_people_dni: DNI del cliente (obligatorio)
             osc_conversation_id: ID de conversación existente en Infobip (opcional)
         """
-        # Normalizar teléfono: si viene con '+' al inicio quitarlo y eliminar espacios
+        # Normalizar teléfono: quitar '+' al inicio, eliminar espacios,
+        # si viene con duplicado de prefijo '51' al inicio (ej: '5151...')
+        # eliminar el primer '51', y si viene como '9...' añadir '51' adelante.
         print(osc_people_telefono)
         if osc_people_telefono:
             telefono_normalizado = osc_people_telefono.strip()
-            if telefono_normalizado.startswith("+"):
-                telefono_normalizado = telefono_normalizado.lstrip("+")
-            telefono_normalizado = telefono_normalizado.replace(" ", "")
+            # Eliminar todos los signos '+' en cualquier posición y espacios
+            telefono_normalizado = telefono_normalizado.replace("+", "").replace(" ", "")
+
+            # Caso: duplicado de prefijo '51' al inicio, p.ej '5151...'
+            if telefono_normalizado.startswith("5151"):
+                telefono_normalizado = telefono_normalizado[2:]
+            # Caso: número móvil sin prefijo, p.ej '9xxxxxxx' -> anteponer '51'
+            elif telefono_normalizado.startswith("9"):
+                telefono_normalizado = "51" + telefono_normalizado
+
             osc_people_telefono = telefono_normalizado
         print(osc_people_telefono)
         osc_conversation_lead_id = self.obtenerLeadIdPorNumber(osc_conversation_lead_id)  # Me estan pasando el leadnumber en ves de el lead id
