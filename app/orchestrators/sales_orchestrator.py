@@ -1440,7 +1440,7 @@ class SalesOrchestrator:
         except Exception:
             return False
 
-    def _agregar_etiqueta_conversacion(self, conversation_id: str, etiqueta: str) -> bool:
+    def _agregar_etiqueta_conversacion(self, conversation_id: str) -> bool:
         """
         Agrega una etiqueta (tag) a una conversación en Infobip.
 
@@ -1461,7 +1461,7 @@ class SalesOrchestrator:
 
 
             # Payload según documentación Infobip: enviar 'tagName'
-            payload = {"tagName": etiqueta}
+            payload = {"tagName": "CRM"}
 
             response = requests.post(url, headers=headers, json=payload, timeout=15)
 
