@@ -1127,6 +1127,7 @@ class SalesOrchestrator:
                     print(f"enviar_template_conversacion (existing) result: {resp_template}")
                 except Exception as e:
                     print(f"Error llamando enviar_template_conversacion (existing): {e}")
+        self._agregar_etiqueta_conversacion(conversation_id)
         return {
             "success": True,
             "person_id": person_id,
@@ -1436,6 +1437,43 @@ class SalesOrchestrator:
             
             return response.status_code in [200, 201]
             
+        except Exception:
+            return False
+
+    def _agregar_etiqueta_conversacion(self, conversation_id: str, etiqueta: str) -> bool:
+        """
+        Agrega una etiqueta (tag) a una conversación en Infobip.
+
+        Args:
+            conversation_id: ID de la conversación en Infobip
+            etiqueta: Texto de la etiqueta a agregar
+
+        Returns:
+            True si se agregó correctamente, False si falló
+        """
+        try:
+            url = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{conversation_id}/tags"
+            headers = {
+                "Authorization": f"App {settings.INFOBIP_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+
+
+            # Payload según documentación Infobip: enviar 'tagName'
+            payload = {"tagName": etiqueta}
+
+            response = requests.post(url, headers=headers, json=payload, timeout=15)
+
+            # Logs de depuración (similar al snippet de ejemplo)
+            try:
+                print("Add tag - Status:", response.status_code)
+                print("Add tag - Body:", response.text)
+            except Exception:
+                pass
+
+            return response.status_code in (200, 201, 204)
+
         except Exception:
             return False
     
