@@ -472,7 +472,7 @@ class ConversationService:
                 # GET para obtener observaciones actuales
                 response_get = client.get(url_get, headers=headers, params=params_get, timeout=30.0)
                 response_get.raise_for_status()
-                lead_data = response_get["items"][0].json()
+                lead_data = response_get.json()["items"][0]
                 print("lead_data",lead_data)
                 # Obtener observaciones anteriores
                 observaciones_anteriores = lead_data.get("CTRObservacionesActiv_c", "") or ""
