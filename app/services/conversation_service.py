@@ -473,7 +473,7 @@ class ConversationService:
                 response_get = client.get(url_get, headers=headers, params=params_get, timeout=30.0)
                 response_get.raise_for_status()
                 lead_data = response_get.json()
-                
+                print("lead_data",lead_data)
                 # Obtener observaciones anteriores
                 observaciones_anteriores = lead_data.get("CTRObservacionesActiv_c", "") or ""
                 # If the lead is already converted, post a note in Infobip (best-effort)
