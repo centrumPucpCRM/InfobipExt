@@ -9,6 +9,7 @@ import smtplib
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import re
 
 from app.services.people_service import PeopleService
 from app.services.conversation_service import ConversationService
@@ -570,6 +571,8 @@ class SalesOrchestrator:
         print(osc_people_telefono)
         if osc_people_telefono:
             telefono_normalizado = osc_people_telefono.strip()
+            # Eliminar todo lo que esté entre paréntesis (ej: 51(1)9919... -> 519919...)
+            telefono_normalizado = re.sub(r"\([^)]*\)", "", telefono_normalizado)
             # Eliminar todos los signos '+' en cualquier posición y espacios
             telefono_normalizado = telefono_normalizado.replace("+", "").replace(" ", "")
 
