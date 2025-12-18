@@ -536,7 +536,7 @@ class ConversationService:
                 print(url_get)
                 print(lead_data)
                 print(lead_data.get("LeadId"))
-                response_patch = client.patch(url_get+lead_data.get("LeadId"), headers=headers, params=params_patch, json=body, timeout=30.0)
+                response_patch = client.patch(url_get+str(lead_data.get("LeadId")), headers=headers, params=params_patch, json=body, timeout=30.0)
                 response_patch.raise_for_status()
                 oracle_response = response_patch.json()
                 # Publicar nota en Infobip indicando éxito (best-effort)
