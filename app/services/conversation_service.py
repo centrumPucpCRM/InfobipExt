@@ -456,13 +456,14 @@ class ConversationService:
             lead_id = lead_ids[0]
         
         # 2. Obtener datos actuales del Lead desde Oracle
-        url_get = f"{settings.ORACLE_CRM_URL}/leads/{lead_id}"
+        url_get = f"{settings.ORACLE_CRM_URL}/leads/"
         headers = {
             "Authorization": settings.ORACLE_CRM_AUTH,
             "Content-Type": "application/json"
         }
         params_get = {
             "onlyData": "true",
+            "q": f"LeadNumber={lead_id}",
             "fields": "CTRObservacionesActiv_c,StatusCode"
         }
         
@@ -530,6 +531,7 @@ class ConversationService:
                 # 5. Hacer PATCH a Oracle
                 params_patch = {
                     "onlyData": "true",
+                    "q": f"LeadNumber={lead_id}",
                     "fields": "StatusCode"
                 }
                 
