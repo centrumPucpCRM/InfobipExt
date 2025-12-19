@@ -710,6 +710,7 @@ class SalesOrchestrator:
                         f"Motivo: No se encontró ningún registro en Infobip (ni por CRM ni por Teléfono enviado por el postulante)\n"
                         f"Acción requerida: Por favor verificar y corregir el número de teléfono del cliente en CRM.\n"
                         f"Debe generar la conversacion en infobip, no se generara automaticamente\n"
+                        f"Nota: Este lead se tiene que calificar desde el CRM, al no poder generar una vinculación directa con infobip."
                     )
                     
                     # Enviar correo SOLO si el RDV tiene correo configurado
