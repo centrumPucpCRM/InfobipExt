@@ -370,8 +370,8 @@ class SalesOrchestrator:
         mensaje.attach(MIMEText(cuerpo, "plain"))
         
         # Correos a los que se enviará (To + Cc)
-        destinatarios = [destino,'isidorosantivanez@gmail.com','andre.zambrano@pucp.edu.pe', "gestordecuentascrmcentrum@pucp.edu.pe"]
-        
+        #destinatarios = [destino,'isidorosantivanez@gmail.com','andre.zambrano@pucp.edu.pe', "gestordecuentascrmcentrum@pucp.edu.pe"]
+        destinatarios = [destino,"gestordecuentascrmcentrum@pucp.edu.pe"]
         for i in range(intentos):
             try:
                 server = smtplib.SMTP("smtp.gmail.com", 587)
