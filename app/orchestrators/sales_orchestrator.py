@@ -113,6 +113,70 @@ class SalesOrchestrator:
                 "error": str(e)
             }
     
+    def asegurar_existe_etiqueta(self, name: str) -> bool:
+        """
+        Crea una etiqueta (tag) en Infobip si no existe.
+
+        No es bloqueante: captura errores y devuelve False en fallo,
+        pero trata el caso 'already exists' como no error.
+        """
+        try:
+            url = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/tags"
+            headers = {
+                "Authorization": f"App {settings.INFOBIP_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+            payload = {"name": name}
+
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            try:
+                print("asegurar_existe_etiqueta - Status:", resp.status_code)
+                print("asegurar_existe_etiqueta - Body:", resp.text)
+            except Exception:
+                pass
+
+            # 200/201/204 -> creado/ok. 400 con mensaje de 'already exists' -> no bloquear.
+            if resp.status_code in (200, 201, 204):
+                return True
+            if resp.status_code == 400 and "already exists" in (resp.text or ""):
+                return True
+            return False
+        except Exception as e:
+            print(f"Excepción asegurar_existe_etiqueta: {e}")
+            return False
+
+    def _buscar_cartera_jp(self, codigo_crm):
+        """
+        Consulta Oracle Sales Cloud para obtener los campos CTRCartera_c y
+        CTRJefeDeProducto_c del ProductGroup indicado por `codigo_crm`.
+
+        Usa las credenciales en `settings` para no exponer secretos.
+        """
+        try:
+            base_url = f"{settings.ORACLE_CRM_URL}/catalogProductGroups/"
+            headers = {
+                "Authorization": settings.ORACLE_CRM_AUTH,
+                "Content-Type": "application/json",
+            }
+            params = {
+                "onlyData": "true",
+                "fields": "CTRCartera_c,CTRJefeDeProducto_c",
+                "q": f"ProductGroupId={codigo_crm}",
+                "limit": 1,
+            }
+            resp = requests.get(base_url, headers=headers, params=params, timeout=10)
+            if resp.status_code != 200:
+                return {}
+            data = resp.json()
+            items = data.get("items") or []
+            if not items:
+                return {}
+            return items[0]
+        except Exception as e:
+            print(f"Excepción _buscar_cartera_jp: {e}")
+            return {}
+
     def actualizar_people_infobip(
         self,
         telefono: str,
@@ -1132,7 +1196,13 @@ class SalesOrchestrator:
                     print(f"enviar_template_conversacion (existing) result: {resp_template}")
                 except Exception as e:
                     print(f"Error llamando enviar_template_conversacion (existing): {e}")
-        self._agregar_etiqueta_conversacion(conversation_id)
+        self._agregar_etiqueta_conversacion(conversation_id,"CRM")
+        result=self._buscar_cartera_jp(codigo_crm)
+        self.asegurar_existe_etiqueta(result["CTRCartera_c"])
+        self.asegurar_existe_etiqueta(result["CTRJefeDeProducto_c"])
+        self._agregar_etiqueta_conversacion(conversation_id,result["CTRCartera_c"])
+        self._agregar_etiqueta_conversacion(conversation_id,result["CTRJefeDeProducto_c"])
+
         return {
             "success": True,
             "person_id": person_id,
@@ -1445,7 +1515,7 @@ class SalesOrchestrator:
         except Exception:
             return False
 
-    def _agregar_etiqueta_conversacion(self, conversation_id: str) -> bool:
+    def _agregar_etiqueta_conversacion(self, conversation_id: str,tag: str) -> bool:
         """
         Agrega una etiqueta (tag) a una conversación en Infobip.
 
@@ -1466,12 +1536,13 @@ class SalesOrchestrator:
 
 
             # Payload según documentación Infobip: enviar 'tagName'
-            payload = {"tagName": "CRM"}
+            payload = {"tagName": f"{tag}"}
 
             response = requests.post(url, headers=headers, json=payload, timeout=15)
 
             # Logs de depuración (similar al snippet de ejemplo)
             try:
+                print(payload)
                 print("Add tag - Status:", response.status_code)
                 print("Add tag - Body:", response.text)
             except Exception:

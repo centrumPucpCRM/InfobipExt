@@ -3,7 +3,7 @@ Cambios de codigo:
 ------------------
 Local:
 git add .
-git commit -m "Actualizaicon de nota de mailing"
+git commit -m "Agregando notas a la conversacion de cartera y de jp"
 git push origin main
 ================================================================
 Desplegado:
