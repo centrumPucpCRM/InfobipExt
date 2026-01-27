@@ -464,7 +464,7 @@ class ConversationService:
         params_get = {
             "onlyData": "true",
             "q": f"LeadNumber={lead_id}",
-            "fields": "CTRObservacionesActiv_c,StatusCode,LeadId"
+            "fields": "CTRObservacionesActiv_c,StatusCode,LeadId,Rank"
         }
         
         try:
@@ -501,6 +501,47 @@ class ConversationService:
                         "message": f"No se puede actualizar el lead {lead_id}: ya está convertido",
                         "lead_id": lead_id
                     }
+                
+                # Validar que no se retroceda de etapa (COOL=1 < WARM=2 < HOT=3)
+                ETAPA_PRIORIDAD = {"COOL": 1, "WARM": 2, "HOT": 3}
+                etapa_actual = lead_data.get("Rank", "") or ""
+                prioridad_actual = ETAPA_PRIORIDAD.get(etapa_actual, 0)
+                prioridad_nueva = ETAPA_PRIORIDAD.get(etapa, 0)
+                
+                # Solo validar si ambas etapas están en el diccionario de prioridades
+                if prioridad_nueva > 0 and prioridad_actual > 0 and prioridad_nueva < prioridad_actual:
+                    # Mapear a descripción amigable
+                    etapa_desc = {"COOL": "Poco Prometedora", "WARM": "Medianamente Prometedora", "HOT": "Prometedora"}
+                    etapa_actual_desc = etapa_desc.get(etapa_actual, etapa_actual)
+                    etapa_nueva_desc = etapa_desc.get(etapa, etapa)
+                    
+                    # Notificar a Infobip que no se puede retroceder
+                    try:
+                        nota_text = (
+                            f"No se pudo actualizar el lead porque no está permitido retroceder de etapa.\n"
+                            f"Etapa actual: {etapa_actual_desc}\n"
+                            f"Etapa solicitada: {etapa_nueva_desc}\n"
+                            f"Solo se permite avanzar de etapa (Poco Prometedora → Medianamente Prometedora → Prometedora)."
+                        )
+                        url_nota = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{id_conversation}/notes"
+                        payload_nota = {"content": nota_text}
+                        headers_infobip = {
+                            "Authorization": f"App {settings.INFOBIP_API_KEY}",
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        }
+                        client.post(url_nota, headers=headers_infobip, json=payload_nota, timeout=10.0)
+                    except Exception:
+                        pass
+                    
+                    return {
+                        "success": False,
+                        "message": f"No se puede retroceder de etapa. Etapa actual: {etapa_actual_desc}, etapa solicitada: {etapa_nueva_desc}",
+                        "lead_id": lead_id,
+                        "etapa_actual": etapa_actual,
+                        "etapa_solicitada": etapa
+                    }
+                
                 # 3. Construir nuevo comentario con fecha
                 fecha_actual = datetime.now().strftime("%d.%m.%Y")
                 nuevo_comentario = f"{fecha_actual} - {comentario}" if comentario else ""
