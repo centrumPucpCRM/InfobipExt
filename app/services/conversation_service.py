@@ -481,8 +481,7 @@ class ConversationService:
                     # Notificar a Infobip que no se encontró el lead en Oracle
                     try:
                         nota_text = (
-                            f"No se pudo actualizar el lead porque no se encontró en Oracle CRM.\n"
-                            f"Lead ID buscado: {lead_id}"
+                            f"El lead esta dado de baja.\n"
                         )
                         url_nota = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{id_conversation}/notes"
                         payload_nota = {"content": nota_text}
@@ -506,6 +505,32 @@ class ConversationService:
                 # Obtener observaciones anteriores
                 observaciones_anteriores = lead_data.get("CTRObservacionesActiv_c", "") or ""
                 # If the lead is already converted, post a note in Infobip (best-effort)
+                if lead_data.get("StatusCode", "") == 'RETIRED':
+                    try:
+                        nota_text = (
+                            "No se pudo actualizar el lead porque esta dado de baja previamente en el CRM. "
+                        )
+                        url_nota = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{id_conversation}/notes"
+                        payload_nota = {"content": nota_text}
+                        headers_infobip = {
+                            "Authorization": f"App {settings.INFOBIP_API_KEY}",
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        }
+                        try:
+                            client.post(url_nota, headers=headers_infobip, json=payload_nota, timeout=10.0)
+                        except Exception as e:
+                            print("Error:",e)
+                    except Exception as e:
+                        print("Error:",e)
+
+                    return {
+                        "success": False,
+                        "message": f"No se puede actualizar el lead {lead_id}: ya está convertido",
+                        "lead_id": lead_id
+                    }
+                
+                   
                 if lead_data.get("StatusCode", "") == 'CONVERTED':
                     try:
                         nota_text = (
