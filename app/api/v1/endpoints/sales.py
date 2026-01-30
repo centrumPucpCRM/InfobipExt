@@ -78,3 +78,41 @@ def flujo_venta_pasiva(
     """
     orchestrator = SalesOrchestrator(db)
     return orchestrator.flujo_venta_pasiva()
+
+
+class VincularLeadRequest(BaseModel):
+    """Request para vincular un lead con una conversación"""
+    lead_id: str = Field(..., description="LeadId del lead en Oracle", example="300000123456789")
+    conversation_id: str = Field(..., description="ID de la conversación en Infobip", example="abc123-def456-ghi789")
+
+
+@router.post(
+    "/vincular-lead",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(verify_token)],
+    summary="Vincular Lead con Conversación",
+    description="Actualiza el campo CTRIdConversacionInfobip_c del lead en Oracle con el ID de conversación de Infobip"
+)
+def vincular_lead_conversation(
+    request: VincularLeadRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    **Vincular Lead con Conversación**
+    
+    Actualiza el lead en Oracle Sales Cloud con el ID de conversación de Infobip.
+    
+    - **lead_id**: LeadId del lead en Oracle (ej: 300000123456789)
+    - **conversation_id**: ID de la conversación en Infobip
+    """
+    orchestrator = SalesOrchestrator(db)
+    resultado = orchestrator._vincular_lead_conversation_id(
+        lead_id=request.lead_id,
+        conversation_id=request.conversation_id
+    )
+    return {
+        "success": resultado,
+        "lead_id": request.lead_id,
+        "conversation_id": request.conversation_id,
+        "message": "Lead vinculado exitosamente" if resultado else "Error al vincular lead"
+    }

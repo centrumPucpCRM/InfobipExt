@@ -1193,9 +1193,10 @@ class SalesOrchestrator:
                         agent_id=agente_external_id,
                         language="es_PE",
                     )
-                    print(f"enviar_template_conversacion (existing) result: {resp_template}")
+                    print(f"enviar_template_conversacion (existing) resu    lt: {resp_template}")
                 except Exception as e:
                     print(f"Error llamando enviar_template_conversacion (existing): {e}")
+        self._vincular_lead_conversation_id(lead_id,conversation_id)
         self._agregar_etiqueta_conversacion(conversation_id,"CRM")
         result=self._buscar_cartera_jp(codigo_crm)
         self.asegurar_existe_etiqueta(result["CTRCartera_c"])
@@ -1669,3 +1670,40 @@ class SalesOrchestrator:
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _vincular_lead_conversation_id(self, lead_id: str, conversation_id: str) -> bool:
+        """
+        Vincula un lead con un conversation_id actualizando el campo CTRIdConversacionInfobip_c en Oracle.
+        
+        Args:
+            lead_id: LeadId del lead en Oracle
+            conversation_id: ID de la conversación en Infobip
+            
+        Returns:
+            True si se vinculó correctamente, False si falló
+        """
+        try:
+            url_patch = f"{settings.ORACLE_CRM_URL}/leads/{lead_id}"
+            headers = {
+                "Authorization": settings.ORACLE_CRM_AUTH,
+                "Content-Type": "application/json"
+            }
+            params = {
+                "onlyData": "true"
+            }
+            payload = {
+                "CTRIdConversacionInfobip_c": conversation_id
+            }
+            
+            response_patch = requests.patch(url_patch, params=params, headers=headers, json=payload, timeout=15)
+            
+            if response_patch.status_code in [200, 204]:
+                print(f"Lead {lead_id} vinculado exitosamente con conversación {conversation_id}")
+                return True
+            else:
+                print(f"Error actualizando lead {lead_id}: {response_patch.status_code} - {response_patch.text}")
+                return False
+                
+        except Exception as e:
+            print(f"Excepción vinculando lead con conversación: {str(e)}")
+            return False
