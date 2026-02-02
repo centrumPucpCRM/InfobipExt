@@ -84,6 +84,7 @@ class VincularLeadRequest(BaseModel):
     """Request para vincular un lead con una conversación"""
     lead_id: str = Field(..., description="LeadId del lead en Oracle", example="300000123456789")
     conversation_id: str = Field(..., description="ID de la conversación en Infobip", example="abc123-def456-ghi789")
+    nota: Optional[str] = Field(None, description="Nota opcional para agregar a la conversación", example="Lead sincronizado desde CRM")
 
 
 @router.post(
@@ -104,15 +105,25 @@ def vincular_lead_conversation(
     
     - **lead_id**: LeadId del lead en Oracle (ej: 300000123456789)
     - **conversation_id**: ID de la conversación en Infobip
+    - **nota**: (Opcional) Nota a agregar a la conversación
     """
     orchestrator = SalesOrchestrator(db)
     resultado = orchestrator._vincular_lead_conversation_id(
         lead_id=request.lead_id,
         conversation_id=request.conversation_id
     )
+    
+    nota_agregada = False
+    if resultado and request.nota:
+        nota_agregada = orchestrator._agregar_nota_conversacion(
+            conversation_id=request.conversation_id,
+            nota=f"Lead sincronizado: {request.nota}"
+        )
+    
     return {
         "success": resultado,
         "lead_id": request.lead_id,
         "conversation_id": request.conversation_id,
+        "nota_agregada": nota_agregada,
         "message": "Lead vinculado exitosamente" if resultado else "Error al vincular lead"
     }
