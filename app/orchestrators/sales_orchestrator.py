@@ -1031,7 +1031,7 @@ class SalesOrchestrator:
 
                 if enviar_plantilla:
                     try:
-                        resp_template = self.enviar_template_conversacion(
+                        resp_template = self._enviar_template_con_fallback(
                             to_number=telefono_final,
                             conversation_id=conversation_id,
                             template_name="robot_saludo_automatico",
@@ -1041,9 +1041,9 @@ class SalesOrchestrator:
                             agent_id=agente_external_id,
                             language="es_PE",
                         )
-                        print(f"enviar_template_conversacion (existing) result: {resp_template}")
+                        print(f"Resultado envío plantilla con fallback: {resp_template}")
                     except Exception as e:
-                        print(f"Error llamando enviar_template_conversacion (existing): {e}")
+                        print(f"Error enviando plantilla con fallback: {e}")
 
 
 
@@ -1183,7 +1183,7 @@ class SalesOrchestrator:
             )
             if enviar_plantilla:
                 try:
-                    resp_template = self.enviar_template_conversacion(
+                    resp_template = self._enviar_template_con_fallback(
                         to_number=telefono_final,
                         conversation_id=conversation_id,
                         template_name="robot_saludo_automatico",
@@ -1193,9 +1193,9 @@ class SalesOrchestrator:
                         agent_id=agente_external_id,
                         language="es_PE",
                     )
-                    print(f"enviar_template_conversacion (existing) resu    lt: {resp_template}")
+                    print(f"Resultado envío plantilla con fallback: {resp_template}")
                 except Exception as e:
-                    print(f"Error llamando enviar_template_conversacion (existing): {e}")
+                    print(f"Error enviando plantilla con fallback: {e}")
         self._vincular_lead_conversation_id(lead_id,conversation_id)
         self._agregar_etiqueta_conversacion(conversation_id,"CRM")
         result=self._buscar_cartera_jp(codigo_crm)
@@ -1602,6 +1602,79 @@ class SalesOrchestrator:
         return {
             "message": "Este flujo se trabaja netamente en infobip, no hay logica backend"
         }
+
+    def _enviar_template_con_fallback(
+        self,
+        to_number: str,
+        conversation_id: str,
+        template_name: str = "robot_saludo_automatico",
+        seller_name: Optional[str] = None,
+        codigo_crm: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        from_number: Optional[str] = None,
+        language: str = "es_PE",
+    ) -> Dict[str, Any]:
+        """
+        Envía una plantilla y si falla con error 7032 (mensaje no entregado),
+        reintenea con 'crm_plantilla_utility' como fallback.
+        
+        Args:
+            to_number: Número de teléfono destino
+            conversation_id: ID de la conversación en Infobip
+            template_name: Nombre de la plantilla principal
+            seller_name: Nombre del vendedor
+            codigo_crm: Código CRM del programa
+            agent_id: ID del agente
+            from_number: Número origen
+            language: Idioma
+            
+        Returns:
+            Diccionario con el resultado (success, status_code, body)
+        """
+        # Intentar con la plantilla principal
+        resultado_principal = self.enviar_template_conversacion(
+            to_number=to_number,
+            conversation_id=conversation_id,
+            template_name=template_name,
+            seller_name=seller_name,
+            codigo_crm=codigo_crm,
+            agent_id=agent_id,
+            from_number=from_number,
+            language=language,
+        )
+        
+        # Si es exitoso, retornar
+        if resultado_principal.get("success"):
+            print(f"Plantilla '{template_name}' enviada exitosamente")
+            return resultado_principal
+        
+        # Si falló, revisar si es el error 7032
+        body_text = resultado_principal.get("body", "")
+        if "7032" in body_text:
+            print(f"Error 7032 detectado en plantilla '{template_name}', intentando con 'crm_plantilla_utility'...")
+            
+            # Reintentar con plantilla de fallback
+            resultado_fallback = self.enviar_template_conversacion(
+                to_number=to_number,
+                conversation_id=conversation_id,
+                template_name="crm_plantilla_utility",
+                seller_name=seller_name,
+                codigo_crm=codigo_crm,
+                agent_id=agent_id,
+                from_number=from_number,
+                language=language,
+            )
+            
+            if resultado_fallback.get("success"):
+                print(f"Plantilla fallback 'crm_plantilla_utility' enviada exitosamente")
+                return resultado_fallback
+            else:
+                print(f"Plantilla fallback también falló: {resultado_fallback.get('body', 'Error desconocido')}")
+                return resultado_fallback
+        
+        # Si falló por otro motivo, retornar el error original
+        print(f"Error enviando plantilla '{template_name}': {body_text}")
+        return resultado_principal
 
     def enviar_template_conversacion(
         self,
