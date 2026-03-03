@@ -1621,7 +1621,7 @@ class SalesOrchestrator:
             language: Idioma
             
         Returns:
-            Diccionario con el resultado (success, status_code, body)
+            Diccionario con el resultado (status_code, body)
         """
         # Intentar con la plantilla principal
         resultado_principal = self.enviar_template_conversacion(
@@ -1635,38 +1635,33 @@ class SalesOrchestrator:
             language=language,
         )
         
-        # Si es exitoso, retornar
-        if resultado_principal.get("success"):
-            print(f"Plantilla '{template_name}' enviada exitosamente")
+        # Si es exitoso (HTTP 200), retornar
+        if resultado_principal.get("status_code") == 200:
+            print(f"Plantilla '{template_name}' enviada exitosamente (status 200)")
             return resultado_principal
         
-        # Si falló, revisar si es el error 7032
+        # Falló el envío → intentar con plantilla de fallback
         body_text = resultado_principal.get("body", "")
-        if "7032" in body_text:
-            print(f"Error 7032 detectado en plantilla '{template_name}', intentando con 'crm_plantilla_utility'...")
-            
-            # Reintentar con plantilla de fallback
-            resultado_fallback = self.enviar_template_conversacion(
-                to_number=to_number,
-                conversation_id=conversation_id,
-                template_name="crm_plantilla_utility",
-                seller_name=seller_name,
-                codigo_crm=codigo_crm,
-                agent_id=agent_id,
-                from_number=from_number,
-                language=language,
-            )
-            
-            if resultado_fallback.get("success"):
-                print(f"Plantilla fallback 'crm_plantilla_utility' enviada exitosamente")
-                return resultado_fallback
-            else:
-                print(f"Plantilla fallback también falló: {resultado_fallback.get('body', 'Error desconocido')}")
-                return resultado_fallback
+        print(f"Error enviando plantilla '{template_name}' (status {resultado_principal.get('status_code')}): {body_text}")
+        print(f"Intentando con plantilla fallback 'crm_plantilla_utility'...")
         
-        # Si falló por otro motivo, retornar el error original
-        print(f"Error enviando plantilla '{template_name}': {body_text}")
-        return resultado_principal
+        resultado_fallback = self.enviar_template_conversacion(
+            to_number=to_number,
+            conversation_id=conversation_id,
+            template_name="crm_plantilla_utility",
+            seller_name=seller_name,
+            codigo_crm=codigo_crm,
+            agent_id=agent_id,
+            from_number=from_number,
+            language=language,
+        )
+        
+        if resultado_fallback.get("status_code") == 200:
+            print(f"Plantilla fallback 'crm_plantilla_utility' enviada exitosamente (status 200)")
+        else:
+            print(f"Plantilla fallback también falló (status {resultado_fallback.get('status_code')}): {resultado_fallback.get('body', 'Error desconocido')}")
+        
+        return resultado_fallback
 
     def enviar_template_conversacion(
         self,
@@ -1683,7 +1678,7 @@ class SalesOrchestrator:
         """
         Envía un mensaje tipo TEMPLATE (WhatsApp) dentro de una conversación existente en Infobip.
 
-        Retorna un diccionario con `success`, `status_code` y `body` o `error`.
+        Retorna un diccionario con `status_code` y `body` (o `error`). Status 200 = éxito.
         """
         try:
             url = f"https://{settings.INFOBIP_API_HOST}/ccaas/1/conversations/{conversation_id}/messages"
@@ -1729,12 +1724,11 @@ class SalesOrchestrator:
             resp = requests.post(url, headers=headers, json=payload, timeout=15)
 
             return {
-                "success": resp.status_code in (200, 201),
                 "status_code": resp.status_code,
                 "body": resp.text,
             }
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {"status_code": 0, "error": str(e)}
 
     def _vincular_lead_conversation_id(self, lead_id: str, conversation_id: str) -> bool:
         """
