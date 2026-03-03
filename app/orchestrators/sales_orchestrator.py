@@ -1100,60 +1100,13 @@ class SalesOrchestrator:
         elif conversacion_activa is not None:
             # Existe conversación activa → Actualizar conversación
             conversation_id = conversacion_activa.get("id")
-
-            #Aca quiero que se obtengan todos los 
-# id	id_conversation	id_people	id_rdv	estado_conversacion	telefono_creado	proxima_sincronizacion	ultima_sincronizacion	codigo_crm	lead_id	created_at	updated_at
-# 276	bcbdfdb4-9968-4ccc-80f1-ece2fc3c3d95	63953	NULL	OPEN	51968352136	2025-12-11 15:14:19.319004	NULL	NULL	NULL	2025-12-10 15:14:19.319409	2025-12-10 15:14:19.31
-            
-            # Lo que quiero es que usando el lead_id que pasas de osc, consultes si ese lead id existe en la tabla rdv_ext, si existe que ya no cree el mensaje de enviar template conversation sino que si lo envie
-            #
             print(conversacion_activa)
             print("conversation_id",conversation_id)
 
-            
-            # 2. Agregar nota con el comentario del flujo
-            comentario = people_a_usar.get("comentario", "")
-            if comentario:
-                self._agregar_nota_conversacion(conversation_id, comentario)
-            
-            # 3. Agregar nota con el nuevo código CRM
-            codigo_crm = osc.get("osc_conversation_codigo_crm")
-            if codigo_crm:
-                nombre_programa = self._obtener_nombre_programa(codigo_crm)
-                # Obtener e imprimir el nombre del cliente por DNI (best-effort)
-                nombre_cliente = None
-                try:
-                    nombre_cliente = self.obtener_nombre_por_dni(osc.get('osc_people_dni'))
-                    if nombre_cliente:
-                        print(f"Nombre cliente: {nombre_cliente}")
-                except Exception:
-                    nombre_cliente = None
-
-                nombre_programa_text = nombre_programa or ""
-                nota = (
-                    f"Dni Cliente: {osc.get('osc_people_dni')}\n"
-                    f"Nombre Cliente: {nombre_cliente or ''}\n"
-                    f"Codigo programa: {codigo_crm}\n"
-                    f"Nombre Programa: {nombre_programa_text}"
-                )
-                self._agregar_nota_conversacion(conversation_id, nota)
-            
-            # 4. Agregar nota con el nuevo vendedor
-            if rdv_party_number:
-                if seller_name:
-                    self._agregar_nota_conversacion(conversation_id, f"Vendedor {seller_name}:{rdv_party_number}")
-                else:
-                    self._agregar_nota_conversacion(conversation_id, f"Vendedor:{rdv_party_number}")
-            
-            # 5. Reasignar conversación al nuevo agente
-            if agente_external_id:
-                self._reasignar_conversacion_infobip(conversation_id, agente_external_id)
-
-            # Enviar plantilla (simple) para la conversación existente
-            # Comprobar si el lead_id que viene desde OSC ya existe en la tabla local `conversation_ext`.
-            # Si existe, OMITIR el envío de la plantilla; si no existe, enviarla.
+            # Verificar PRIMERO si el lead_id ya existe en conversation_ext
+            # para evitar duplicar notas y plantilla cuando Oracle llama más de una vez
             lead_id = osc.get('osc_conversation_lead_id')
-            enviar_plantilla = True
+            lead_ya_registrado = False
             if lead_id:
                 try:
                     from app.models.conversation_ext import ConversationExt
@@ -1164,12 +1117,51 @@ class SalesOrchestrator:
                         .first()
                     )
                     if existe:
-                        enviar_plantilla = False
-                        print(f"Lead {lead_id} ya existe en conversation_ext; se omite envio de plantilla.")
+                        lead_ya_registrado = True
+                        print(f"Lead {lead_id} ya existe en conversation_ext; se omiten notas y plantilla.")
                 except Exception as e:
-                    # Si hay un error consultando la BD, registrarlo y continuar con el envío
                     print(f"Error consultando conversation_ext por lead_id {lead_id}: {e}")
-        
+
+            codigo_crm = osc.get("osc_conversation_codigo_crm")
+
+            if not lead_ya_registrado:
+                # 2. Agregar nota con el comentario del flujo
+                comentario = people_a_usar.get("comentario", "")
+                if comentario:
+                    self._agregar_nota_conversacion(conversation_id, comentario)
+                
+                # 3. Agregar nota con el nuevo código CRM
+                if codigo_crm:
+                    nombre_programa = self._obtener_nombre_programa(codigo_crm)
+                    # Obtener e imprimir el nombre del cliente por DNI (best-effort)
+                    nombre_cliente = None
+                    try:
+                        nombre_cliente = self.obtener_nombre_por_dni(osc.get('osc_people_dni'))
+                        if nombre_cliente:
+                            print(f"Nombre cliente: {nombre_cliente}")
+                    except Exception:
+                        nombre_cliente = None
+
+                    nombre_programa_text = nombre_programa or ""
+                    nota = (
+                        f"Dni Cliente: {osc.get('osc_people_dni')}\n"
+                        f"Nombre Cliente: {nombre_cliente or ''}\n"
+                        f"Codigo programa: {codigo_crm}\n"
+                        f"Nombre Programa: {nombre_programa_text}"
+                    )
+                    self._agregar_nota_conversacion(conversation_id, nota)
+                
+                # 4. Agregar nota con el nuevo vendedor
+                if rdv_party_number:
+                    if seller_name:
+                        self._agregar_nota_conversacion(conversation_id, f"Vendedor {seller_name}:{rdv_party_number}")
+                    else:
+                        self._agregar_nota_conversacion(conversation_id, f"Vendedor:{rdv_party_number}")
+            
+            # 5. Reasignar conversación al nuevo agente (siempre, es idempotente)
+            if agente_external_id:
+                self._reasignar_conversacion_infobip(conversation_id, agente_external_id)
+
             # 7. Guardar conversación en BD local
             ConversationService.create_flexible(
                 db=self.db,
@@ -1181,7 +1173,7 @@ class SalesOrchestrator:
                 codigo_crm=codigo_crm,
                 lead_id=osc.get("osc_conversation_lead_id")
             )
-            if enviar_plantilla:
+            if not lead_ya_registrado:
                 try:
                     resp_template = self._enviar_template_con_fallback(
                         to_number=telefono_final,
