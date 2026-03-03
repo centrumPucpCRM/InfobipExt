@@ -1457,6 +1457,8 @@ class SalesOrchestrator:
                 # Topic: usar el valor pasado (si se proporciona) o el fallback por teléfono
                 "topic": topic if topic is not None else f"Conversación WhatsApp con {telefono}",
                 # "priority": "NORMAL",  # opcional
+                "queueId": "6e87a3c8-fc95-4ff2-bf65-41021b4789f5",
+
             }
             print("agente_external_id: ",agente_external_id)
             if agente_external_id:
@@ -1635,9 +1637,9 @@ class SalesOrchestrator:
             language=language,
         )
         
-        # Si es exitoso (HTTP 200), retornar
-        if resultado_principal.get("status_code") == 200:
-            print(f"Plantilla '{template_name}' enviada exitosamente (status 200)")
+        # Si es exitoso (HTTP 200 o 201), retornar
+        if resultado_principal.get("status_code") in (200, 201):
+            print(f"Plantilla '{template_name}' enviada exitosamente (status {resultado_principal.get('status_code')})")
             return resultado_principal
         
         # Falló el envío → intentar con plantilla de fallback
@@ -1656,8 +1658,8 @@ class SalesOrchestrator:
             language=language,
         )
         
-        if resultado_fallback.get("status_code") == 200:
-            print(f"Plantilla fallback 'crm_plantilla_utility' enviada exitosamente (status 200)")
+        if resultado_fallback.get("status_code") in (200, 201):
+            print(f"Plantilla fallback 'crm_plantilla_utility' enviada exitosamente (status {resultado_fallback.get('status_code')})")
         else:
             print(f"Plantilla fallback también falló (status {resultado_fallback.get('status_code')}): {resultado_fallback.get('body', 'Error desconocido')}")
         
