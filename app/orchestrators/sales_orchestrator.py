@@ -1797,7 +1797,7 @@ class SalesOrchestrator:
             }
             payload = {
                 "customAttributes": {
-                    "agentPartyId": str(rdv_party_id)
+                    "agente_id": str(rdv_party_id)
                 }
             }
             
