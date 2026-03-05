@@ -1195,7 +1195,7 @@ class SalesOrchestrator:
         self.asegurar_existe_etiqueta(result["CTRJefeDeProducto_c"])
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRCartera_c"])
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRJefeDeProducto_c"])
-        self._asignar_pepople_agentPartyId(person_id, agente_external_id)
+        self._asignar_pepople_agentPartyId(person_id, rdv.party_id if rdv else None)
         return {
             "success": True,
             "person_id": person_id,
@@ -1769,19 +1769,19 @@ class SalesOrchestrator:
             print(f"Excepción vinculando lead con conversación: {str(e)}")
             return False
 
-    def _asignar_pepople_agentPartyId(self, person_id: Optional[str], agente_external_id: Optional[str]) -> bool:
+    def _asignar_pepople_agentPartyId(self, person_id: Optional[str], rdv_party_id: Optional[int]) -> bool:
         """
         Asigna el agentPartyId al People en Infobip.
         
         Args:
             person_id: ID del People en Infobip (infobip_id)
-            agente_external_id: ID externo del agente/RDV en Infobip (infobip_external_id)
+            rdv_party_id: Party ID del agente/RDV en Oracle (rdv_ext.party_id)
         
         Returns:
             True si se procesó correctamente, False si falló
         """
-        if not person_id or not agente_external_id:
-            print(f"_asignar_pepople_agentPartyId: Faltan parámetros - person_id: {person_id}, agente_external_id: {agente_external_id}")
+        if not person_id or not rdv_party_id:
+            print(f"_asignar_pepople_agentPartyId: Faltan parámetros - person_id: {person_id}, rdv_party_id: {rdv_party_id}")
             return False
         
         try:
@@ -1797,14 +1797,14 @@ class SalesOrchestrator:
             }
             payload = {
                 "customAttributes": {
-                    "agentPartyId": agente_external_id
+                    "agentPartyId": str(rdv_party_id)
                 }
             }
             
             response = requests.patch(url, headers=headers, params=params, json=payload, timeout=15)
             
             if response.status_code in [200, 204]:
-                print(f"_asignar_pepople_agentPartyId: Exitoso - person_id: {person_id}, agente: {agente_external_id}")
+                print(f"_asignar_pepople_agentPartyId: Exitoso - person_id: {person_id}, rdv_party_id: {rdv_party_id}")
                 return True
             else:
                 print(f"_asignar_pepople_agentPartyId: Error {response.status_code} - {response.text}")
