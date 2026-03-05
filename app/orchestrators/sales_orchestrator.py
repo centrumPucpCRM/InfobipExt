@@ -1195,7 +1195,7 @@ class SalesOrchestrator:
         self.asegurar_existe_etiqueta(result["CTRJefeDeProducto_c"])
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRCartera_c"])
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRJefeDeProducto_c"])
-
+        self._asignar_pepople_agentPartyId(person_id, agente_external_id)
         return {
             "success": True,
             "person_id": person_id,
@@ -1767,4 +1767,49 @@ class SalesOrchestrator:
                 
         except Exception as e:
             print(f"Excepción vinculando lead con conversación: {str(e)}")
+            return False
+
+    def _asignar_pepople_agentPartyId(self, person_id: Optional[str], agente_external_id: Optional[str]) -> bool:
+        """
+        Asigna el agentPartyId al People en Infobip.
+        
+        Args:
+            person_id: ID del People en Infobip (infobip_id)
+            agente_external_id: ID externo del agente/RDV en Infobip (infobip_external_id)
+        
+        Returns:
+            True si se procesó correctamente, False si falló
+        """
+        if not person_id or not agente_external_id:
+            print(f"_asignar_pepople_agentPartyId: Faltan parámetros - person_id: {person_id}, agente_external_id: {agente_external_id}")
+            return False
+        
+        try:
+            url = f"https://{settings.INFOBIP_API_HOST}/people/2/persons"
+            headers = {
+                "Authorization": f"App {settings.INFOBIP_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            params = {
+                "identifier": person_id,
+                "type": "ID"
+            }
+            payload = {
+                "customAttributes": {
+                    "agentPartyId": agente_external_id
+                }
+            }
+            
+            response = requests.patch(url, headers=headers, params=params, json=payload, timeout=15)
+            
+            if response.status_code in [200, 204]:
+                print(f"_asignar_pepople_agentPartyId: Exitoso - person_id: {person_id}, agente: {agente_external_id}")
+                return True
+            else:
+                print(f"_asignar_pepople_agentPartyId: Error {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"Error en _asignar_pepople_agentPartyId: {str(e)}")
             return False
