@@ -5,7 +5,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.rdv_ext import RdvExt
-from app.schemas.rdv_ext import RdvExtCreate
+from app.schemas.rdv_ext import RdvExtCreate, RdvExtUpdate
 
 
 class RdvService:
@@ -45,6 +45,21 @@ class RdvService:
         for key, value in rdv_data.model_dump().items():
             setattr(db_rdv, key, value)
         
+        db.commit()
+        db.refresh(db_rdv)
+        return db_rdv
+
+    @staticmethod
+    def update_partial(db: Session, rdv_id: int, rdv_data: RdvExtUpdate) -> Optional[RdvExt]:
+        """Partially update an existing RDV"""
+        db_rdv = RdvService.get_by_id(db, rdv_id)
+        if not db_rdv:
+            return None
+
+        update_payload = rdv_data.model_dump(exclude_unset=True)
+        for key, value in update_payload.items():
+            setattr(db_rdv, key, value)
+
         db.commit()
         db.refresh(db_rdv)
         return db_rdv

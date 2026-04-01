@@ -21,6 +21,18 @@ class RdvExtCreate(RdvExtBase):
     pass
 
 
+class RdvExtUpdate(BaseModel):
+    """Schema for updating a RdvExt (all fields optional)"""
+    party_id: Optional[int] = Field(None, description="Party ID")
+    party_number: Optional[int] = Field(None, description="Party Number")
+    infobip_external_id: Optional[str] = Field(None, description="External ID for Infobip")
+    correo: Optional[str] = Field(None, description="Correo electrónico")
+    first_name: Optional[str] = Field(None, description="First name from Infobip")
+    last_name: Optional[str] = Field(None, description="Last name from Infobip")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class RdvExt(RdvExtBase):
     """Schema for RdvExt response"""
     id: int

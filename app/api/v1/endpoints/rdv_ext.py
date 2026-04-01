@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.dependencies import get_db, verify_token
 from app.core.config import settings
-from app.schemas.rdv_ext import RdvExt, RdvExtWithRelations, RdvExtCreate
+from app.schemas.rdv_ext import RdvExt, RdvExtWithRelations, RdvExtCreate, RdvExtUpdate
 from app.services.rdv_service import RdvService
 from app.models.rdv_ext import RdvExt as RdvExtModel
 from app.models.conversation_ext import ConversationExt
@@ -65,6 +65,65 @@ def create_rdv(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating RDV: {exc}"
         )
+
+
+@router.put("/{rdv_id}", response_model=RdvExt, dependencies=[Depends(verify_token)])
+def update_rdv(
+    rdv_id: int,
+    rdv_data: RdvExtUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update the provided fields of an existing RDV."""
+    update_payload = rdv_data.model_dump(exclude_unset=True)
+    if not update_payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one field must be provided for update"
+        )
+
+    conflict_filters = []
+    if "party_id" in update_payload and update_payload["party_id"] is not None:
+        conflict_filters.append(RdvExtModel.party_id == update_payload["party_id"])
+    if "party_number" in update_payload and update_payload["party_number"] is not None:
+        conflict_filters.append(RdvExtModel.party_number == update_payload["party_number"])
+    if "infobip_external_id" in update_payload and update_payload["infobip_external_id"]:
+        conflict_filters.append(RdvExtModel.infobip_external_id == update_payload["infobip_external_id"])
+
+    if conflict_filters:
+        duplicate = (
+            db.query(RdvExtModel)
+            .filter(or_(*conflict_filters))
+            .filter(RdvExtModel.id != rdv_id)
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Another RDV already uses one of the provided identifiers"
+            )
+
+    try:
+        updated = RdvService.update_partial(db, rdv_id, rdv_data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Conflict updating RDV: duplicated identifier"
+        )
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating RDV: {exc}"
+        )
+
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="RDV not found"
+        )
+
+    return updated
 
 
 @router.get("/search", response_model=RdvExtWithRelations, dependencies=[Depends(verify_token)])
