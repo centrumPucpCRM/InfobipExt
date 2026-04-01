@@ -9,10 +9,11 @@ import requests
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
 from app.core.dependencies import get_db, verify_token
 from app.core.config import settings
-from app.schemas.rdv_ext import RdvExt, RdvExtWithRelations
+from app.schemas.rdv_ext import RdvExt, RdvExtWithRelations, RdvExtCreate
 from app.services.rdv_service import RdvService
 from app.models.rdv_ext import RdvExt as RdvExtModel
 from app.models.conversation_ext import ConversationExt
@@ -28,6 +29,42 @@ def list_rdv(
 ):
     """Retrieve all RDV with pagination"""
     return RdvService.get_all(db, skip=skip, limit=limit)
+
+
+@router.post("/", response_model=RdvExt, status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_token)])
+def create_rdv(
+    rdv_data: RdvExtCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new RDV entry manually."""
+    filters = [
+        RdvExtModel.party_id == rdv_data.party_id,
+        RdvExtModel.party_number == rdv_data.party_number,
+    ]
+    if rdv_data.infobip_external_id:
+        filters.append(RdvExtModel.infobip_external_id == rdv_data.infobip_external_id)
+
+    existing = db.query(RdvExtModel).filter(or_(*filters)).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="RDV already exists for the provided identifiers"
+        )
+
+    try:
+        return RdvService.create(db, rdv_data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="RDV already exists for the given party_id"
+        )
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating RDV: {exc}"
+        )
 
 
 @router.get("/search", response_model=RdvExtWithRelations, dependencies=[Depends(verify_token)])
