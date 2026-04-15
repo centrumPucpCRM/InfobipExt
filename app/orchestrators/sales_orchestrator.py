@@ -148,8 +148,9 @@ class SalesOrchestrator:
 
     def _buscar_cartera_jp(self, codigo_crm):
         """
-        Consulta Oracle Sales Cloud para obtener los campos CTRCartera_c y
-        CTRJefeDeProducto_c del ProductGroup indicado por `codigo_crm`.
+        Consulta Oracle Sales Cloud para obtener los campos CTRCartera_c,
+        CTRJefeDeProducto_c, CTRTipoPrograma_cMeaning y CTRModalidad_cMeaning
+        del ProductGroup indicado por `codigo_crm`.
 
         Usa las credenciales en `settings` para no exponer secretos.
         """
@@ -161,7 +162,7 @@ class SalesOrchestrator:
             }
             params = {
                 "onlyData": "true",
-                "fields": "CTRCartera_c,CTRJefeDeProducto_c",
+                "fields": "CTRCartera_c,CTRJefeDeProducto_c,CTRTipoPrograma_cMeaning,CTRModalidad_cMeaning",
                 "q": f"ProductGroupId={codigo_crm}",
                 "limit": 1,
             }
@@ -176,6 +177,45 @@ class SalesOrchestrator:
         except Exception as e:
             print(f"Excepción _buscar_cartera_jp: {e}")
             return {}
+
+    def _calcular_subdireccion(self, cartera: str, modalidad: str) -> str:
+        """
+        Calcula la Subdirección a partir de CTRCartera_c y CTRModalidad_cMeaning.
+
+        Args:
+            cartera: Valor de CTRCartera_c
+            modalidad: Valor de CTRModalidad_cMeaning (ej: 'ASINCRONO')
+
+        Returns:
+            'CentrumX', 'Grado', 'Educación Ejecutiva', u 'Otro'
+        """
+        carteras_grado = {
+            'CentrumX PUCP',
+            'Executive - Tiempo completo',
+            'MBA Centrum',
+            'MADEN',
+            'Maestria Especializada Core',
+            'Perú - Regiones (Grado)',
+            'Maestria Especializada Sectoriales',
+        }
+        carteras_ee = {
+            'EE Alta Dirección',
+            'EE Sectoriales',
+            'EE Operaciones, Supply y Proyectos',
+            'EE Estrategia, Gestión y Talento',
+            'EE Marketing, Ventas y Comercial',
+            'EE Finanzas, Contabilidad y Gestión de Riesgos',
+            'EE Tecnología, Innovación y Agile',
+            'EE Alta Dirección, Incompany y B2B',
+            'EE EdEx',
+            'In Company',
+        }
+
+        if cartera in carteras_grado:
+            return 'CentrumX' if (modalidad or '').upper() == 'ASINCRONO' else 'Grado'
+        if cartera in carteras_ee:
+            return 'Educación Ejecutiva'
+        return 'Otro'
 
     def actualizar_people_infobip(
         self,
@@ -1195,6 +1235,16 @@ class SalesOrchestrator:
         self.asegurar_existe_etiqueta(result["CTRJefeDeProducto_c"])
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRCartera_c"])
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRJefeDeProducto_c"])
+        subdireccion = self._calcular_subdireccion(
+            result.get("CTRCartera_c", ""),
+            result.get("CTRModalidad_cMeaning", "")
+        )
+        self.asegurar_existe_etiqueta(subdireccion)
+        self._agregar_etiqueta_conversacion(conversation_id, subdireccion)
+        tipo_programa = result.get("CTRTipoPrograma_cMeaning", "")
+        if tipo_programa:
+            self.asegurar_existe_etiqueta(tipo_programa)
+            self._agregar_etiqueta_conversacion(conversation_id, tipo_programa)
         self._asignar_pepople_agentPartyId(person_id, rdv.party_id if rdv else None)
         return {
             "success": True,
