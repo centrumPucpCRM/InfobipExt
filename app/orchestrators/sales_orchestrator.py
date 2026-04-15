@@ -162,7 +162,7 @@ class SalesOrchestrator:
             }
             params = {
                 "onlyData": "true",
-                "fields": "CTRCartera_c,CTRJefeDeProducto_c,CTRTipoPrograma_cMeaning,CTRModalidad_cMeaning",
+                "fields": "CTRCartera_c,CTRJefeDeProducto_c,CTRTipoPrograma_cMeaning,CTRArea_cMeaning,CTRModalidad_cMeaning",
                 "q": f"ProductGroupId={codigo_crm}",
                 "limit": 1,
             }
@@ -178,18 +178,19 @@ class SalesOrchestrator:
             print(f"Excepción _buscar_cartera_jp: {e}")
             return {}
 
-    def _calcular_subdireccion(self, cartera: str, modalidad: str) -> str:
+
+    def _calcular_subdireccion(self, area: str, modalidad: str) -> str:
         """
-        Calcula la Subdirección a partir de CTRCartera_c y CTRModalidad_cMeaning.
+        Calcula la Subdirección a partir de CTRArea_cMeaning y CTRModalidad_cMeaning.
 
         Args:
-            cartera: Valor de CTRCartera_c
+            area: Valor de CTRArea_cMeaning
             modalidad: Valor de CTRModalidad_cMeaning (ej: 'ASINCRONO')
 
         Returns:
             'CentrumX', 'Grado', 'Educación Ejecutiva', u 'Otro'
         """
-        carteras_grado = {
+        areas_grado = {
             'CentrumX PUCP',
             'Executive - Tiempo completo',
             'MBA Centrum',
@@ -198,7 +199,7 @@ class SalesOrchestrator:
             'Perú - Regiones (Grado)',
             'Maestria Especializada Sectoriales',
         }
-        carteras_ee = {
+        areas_ee = {
             'EE Alta Dirección',
             'EE Sectoriales',
             'EE Operaciones, Supply y Proyectos',
@@ -211,9 +212,9 @@ class SalesOrchestrator:
             'In Company',
         }
 
-        if cartera in carteras_grado:
+        if area in areas_grado:
             return 'CentrumX' if (modalidad or '').upper() == 'ASINCRONO' else 'Grado'
-        if cartera in carteras_ee:
+        if area in areas_ee:
             return 'Educación Ejecutiva'
         return 'Otro'
 
@@ -1236,7 +1237,7 @@ class SalesOrchestrator:
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRCartera_c"])
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRJefeDeProducto_c"])
         subdireccion = self._calcular_subdireccion(
-            result.get("CTRCartera_c", ""),
+            result.get("CTRArea_cMeaning", ""),
             result.get("CTRModalidad_cMeaning", "")
         )
         self.asegurar_existe_etiqueta(subdireccion)
