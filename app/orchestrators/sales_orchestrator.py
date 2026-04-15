@@ -162,7 +162,7 @@ class SalesOrchestrator:
             }
             params = {
                 "onlyData": "true",
-                "fields": "CTRCartera_c,CTRJefeDeProducto_c,CTRTipoPrograma_cMeaning,CTRArea_cMeaning,CTRModalidad_cMeaning",
+                "fields": "CTRCartera_c,CTRJefeDeProducto_c,CTRTipoPrograma_cMeaning,CTRModalidad_cMeaning",
                 "q": f"ProductGroupId={codigo_crm}",
                 "limit": 1,
             }
@@ -191,25 +191,22 @@ class SalesOrchestrator:
             'CentrumX', 'Grado', 'Educación Ejecutiva', u 'Otro'
         """
         areas_grado = {
-            'CentrumX PUCP',
-            'Executive - Tiempo completo',
-            'MBA Centrum',
-            'MADEN',
-            'Maestria Especializada Core',
-            'Perú - Regiones (Grado)',
-            'Maestria Especializada Sectoriales',
+            'EXECUTIVE',
+            'LIMA_GRADO',
+            'ME',
+            'PERU_REGIONES',
+            'ME_SECTORIAL',
         }
         areas_ee = {
-            'EE Alta Dirección',
-            'EE Sectoriales',
-            'EE Operaciones, Supply y Proyectos',
-            'EE Estrategia, Gestión y Talento',
-            'EE Marketing, Ventas y Comercial',
-            'EE Finanzas, Contabilidad y Gestión de Riesgos',
-            'EE Tecnología, Innovación y Agile',
-            'EE Alta Dirección, Incompany y B2B',
-            'EE EdEx',
-            'In Company',
+            'ALTA_DIRECCION',
+            'EE_FUERA_LIMA',
+            'EE_OPE_LOG_SCM',
+            'EE_EST_GES_TAL',
+            'EE_MKT_VTS_COM',
+            'EE_FNZ_CON_RIE',
+            'EE_TEC_INN_AGL',
+            'EE_EDEX',
+            'INCOMPANY',
         }
 
         if area in areas_grado:
@@ -1237,7 +1234,7 @@ class SalesOrchestrator:
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRCartera_c"])
         self._agregar_etiqueta_conversacion(conversation_id,result["CTRJefeDeProducto_c"])
         subdireccion = self._calcular_subdireccion(
-            result.get("CTRArea_cMeaning", ""),
+            result.get("CTRCartera_c", ""),
             result.get("CTRModalidad_cMeaning", "")
         )
         self.asegurar_existe_etiqueta(subdireccion)
