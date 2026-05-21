@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # Oracle Sales Cloud API
     ORACLE_CRM_URL: str = "your-oracle-crm-url"
     ORACLE_CRM_AUTH: str = "your-oracle-auth"
+
+    # Reportería externa (conversation-lead relation)
+    REPORTERIA_URL: str = "https://reporteria-comparativa.vercel.app/api/infobip-ext/conversation-lead-relation"
+    REPORTERIA_TOKEN: str = "b230f2d0990553b7606ca2c2fad16b12847cffabaeabe6bc977d239aa1c42d36"
     
     class Config:
         env_file = ".env"

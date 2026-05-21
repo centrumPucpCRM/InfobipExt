@@ -1227,6 +1227,7 @@ class SalesOrchestrator:
                 except Exception as e:
                     print(f"Error enviando plantilla con fallback: {e}")
         self._vincular_lead_conversation_id(lead_id,conversation_id)
+        self._notificar_relacion_lead_conversacion(lead_id, conversation_id)
         self._agregar_etiqueta_conversacion(conversation_id,"CRM")
         result=self._buscar_cartera_jp(codigo_crm)
         self.asegurar_existe_etiqueta(result["CTRCartera_c"])
@@ -1815,6 +1816,43 @@ class SalesOrchestrator:
                 
         except Exception as e:
             print(f"Excepción vinculando lead con conversación: {str(e)}")
+            return False
+
+    def _notificar_relacion_lead_conversacion(
+        self,
+        lead_id: str,
+        conversation_id: str
+    ) -> bool:
+        """
+        Envía la relación lead_id ↔ conversation_id al servicio de reportería externa.
+
+        POST https://reporteria-comparativa.vercel.app/api/infobip-ext/conversation-lead-relation
+        Body: { "infobip_conversation_id": "<conversation_id>", "lead_id": "<lead_id>" }
+
+        Es best-effort: cualquier fallo se loguea pero no interrumpe el flujo principal.
+        """
+        if not lead_id or not conversation_id:
+            print(f"_notificar_relacion_lead_conversacion: parámetros incompletos - lead_id={lead_id}, conversation_id={conversation_id}")
+            return False
+
+        try:
+            response = requests.post(
+                settings.REPORTERIA_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.REPORTERIA_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "infobip_conversation_id": conversation_id,
+                    "lead_id": lead_id,
+                },
+                timeout=10,
+                allow_redirects=False,
+            )
+            print(f"_notificar_relacion_lead_conversacion: status={response.status_code} lead={lead_id} conv={conversation_id}")
+            return response.status_code in (200, 201, 204)
+        except Exception as e:
+            print(f"_notificar_relacion_lead_conversacion: excepción - {e}")
             return False
 
     def _asignar_pepople_agentPartyId(self, person_id: Optional[str], rdv_party_id: Optional[int]) -> bool:
