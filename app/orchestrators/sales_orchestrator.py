@@ -1067,22 +1067,21 @@ class SalesOrchestrator:
                         # Si hay un error consultando la BD, registrarlo y continuar con el envío
                         print(f"Error consultando conversation_ext por lead_id {lead_id}: {e}")
 
-                # Envío de template WhatsApp DESACTIVADO temporalmente.
-                # if enviar_plantilla:
-                #     try:
-                #         resp_template = self._enviar_template_con_fallback(
-                #             to_number=telefono_final,
-                #             conversation_id=conversation_id,
-                #             template_name="robot_saludo_automatico",
-                #             seller_name=seller_name,
-                #             codigo_crm=osc.get('osc_conversation_codigo_crm'),
-                #             from_number=None,
-                #             agent_id=agente_external_id,
-                #             language="es_PE",
-                #         )
-                #         print(f"Resultado envío plantilla con fallback: {resp_template}")
-                #     except Exception as e:
-                #         print(f"Error enviando plantilla con fallback: {e}")
+                if enviar_plantilla:
+                    try:
+                        resp_template = self._enviar_template_con_fallback(
+                            to_number=telefono_final,
+                            conversation_id=conversation_id,
+                            template_name="robot_saludo_automatico",
+                            seller_name=seller_name,
+                            codigo_crm=osc.get('osc_conversation_codigo_crm'),
+                            from_number=None,
+                            agent_id=agente_external_id,
+                            language="es_PE",
+                        )
+                        print(f"Resultado envío plantilla con fallback: {resp_template}")
+                    except Exception as e:
+                        print(f"Error enviando plantilla con fallback: {e}")
 
 
 
@@ -1212,22 +1211,21 @@ class SalesOrchestrator:
                 codigo_crm=codigo_crm,
                 lead_id=osc.get("osc_conversation_lead_id")
             )
-            # Envío de template WhatsApp DESACTIVADO temporalmente.
-            # if not lead_ya_registrado:
-            #     try:
-            #         resp_template = self._enviar_template_con_fallback(
-            #             to_number=telefono_final,
-            #             conversation_id=conversation_id,
-            #             template_name="robot_saludo_automatico",
-            #             seller_name=seller_name,
-            #             codigo_crm=osc.get('osc_conversation_codigo_crm'),
-            #             from_number=None,
-            #             agent_id=agente_external_id,
-            #             language="es_PE",
-            #         )
-            #         print(f"Resultado envío plantilla con fallback: {resp_template}")
-            #     except Exception as e:
-            #         print(f"Error enviando plantilla con fallback: {e}")
+            if not lead_ya_registrado:
+                try:
+                    resp_template = self._enviar_template_con_fallback(
+                        to_number=telefono_final,
+                        conversation_id=conversation_id,
+                        template_name="robot_saludo_automatico",
+                        seller_name=seller_name,
+                        codigo_crm=osc.get('osc_conversation_codigo_crm'),
+                        from_number=None,
+                        agent_id=agente_external_id,
+                        language="es_PE",
+                    )
+                    print(f"Resultado envío plantilla con fallback: {resp_template}")
+                except Exception as e:
+                    print(f"Error enviando plantilla con fallback: {e}")
         self._vincular_lead_conversation_id(lead_id,conversation_id)
         self._notificar_relacion_lead_conversacion(lead_id, conversation_id)
         self._agregar_etiqueta_conversacion(conversation_id,"CRM")
