@@ -133,7 +133,7 @@ def vincular_lead_conversation(
 class ReasignarAgenteRequest(BaseModel):
     """Request para reasignar una conversación al vendedor (RDV) en Infobip"""
     conversation_id: str = Field(..., description="ID de la conversación en Infobip", example="abc123-def456-ghi789")
-    party_id: int = Field(..., description="Party ID del vendedor (RDV) en Oracle. Se traduce a su infobip_external_id (agentId)", example=300000004123456)
+    party_number: int = Field(..., description="Party Number del vendedor (RDV) en Oracle. Se traduce a su infobip_external_id (agentId)", example=4123456)
 
 
 @router.post(
@@ -141,7 +141,7 @@ class ReasignarAgenteRequest(BaseModel):
     response_model=Dict[str, Any],
     dependencies=[Depends(verify_token)],
     summary="Reasignar Conversación a Vendedor",
-    description="Asigna/reasigna una conversación de Infobip al vendedor (RDV) indicado por su party_id. Traduce party_id -> infobip_external_id y usa PUT /ccaas/1/conversations/{id}/assignee"
+    description="Asigna/reasigna una conversación de Infobip al vendedor (RDV) indicado por su party_number. Traduce party_number -> infobip_external_id y usa PUT /ccaas/1/conversations/{id}/assignee"
 )
 def reasignar_agente(
     request: ReasignarAgenteRequest,
@@ -150,25 +150,25 @@ def reasignar_agente(
     """
     **Reasignar Conversación a Vendedor (RDV)**
 
-    Asigna una conversación de Infobip al vendedor indicado por su `party_id`.
+    Asigna una conversación de Infobip al vendedor indicado por su `party_number`.
 
     Pasos:
-    1. Busca el RDV en `rdv_ext` por `party_id`.
+    1. Busca el RDV en `rdv_ext` por `party_number`.
     2. Obtiene su `infobip_external_id` (el `agentId` que entiende Infobip).
     3. Reasigna la conversación vía `PUT /ccaas/1/conversations/{id}/assignee`.
 
     - **conversation_id**: ID de la conversación en Infobip
-    - **party_id**: Party ID del vendedor (RDV) en Oracle
+    - **party_number**: Party Number del vendedor (RDV) en Oracle
     """
-    rdv = RdvService.find_by_party(db=db, party_id=request.party_id)
+    rdv = RdvService.find_by_party(db=db, party_number=request.party_number)
 
     if not rdv:
         return {
             "success": False,
             "conversation_id": request.conversation_id,
-            "party_id": request.party_id,
+            "party_number": request.party_number,
             "agente_external_id": None,
-            "message": f"No se encontró un RDV con party_id={request.party_id}"
+            "message": f"No se encontró un RDV con party_number={request.party_number}"
         }
 
     agente_external_id = rdv.infobip_external_id
@@ -177,9 +177,9 @@ def reasignar_agente(
         return {
             "success": False,
             "conversation_id": request.conversation_id,
-            "party_id": request.party_id,
+            "party_number": request.party_number,
             "agente_external_id": None,
-            "message": f"El RDV con party_id={request.party_id} no tiene infobip_external_id configurado"
+            "message": f"El RDV con party_number={request.party_number} no tiene infobip_external_id configurado"
         }
 
     orchestrator = SalesOrchestrator(db)
@@ -191,7 +191,7 @@ def reasignar_agente(
     return {
         "success": resultado,
         "conversation_id": request.conversation_id,
-        "party_id": request.party_id,
+        "party_number": request.party_number,
         "agente_external_id": agente_external_id,
         "message": "Conversación reasignada exitosamente" if resultado else "Error al reasignar conversación"
     }

@@ -9,7 +9,7 @@ git push origin main
 Desplegado:
 git pull origin main
 docker build -t infobipext-api .
-    docker-compose up -d
+docker-compose up -d
 ================================================================
 ---------------------------------------
 Comandos de sincronizacion de archivos:
