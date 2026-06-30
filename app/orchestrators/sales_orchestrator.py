@@ -2667,23 +2667,35 @@ class SalesOrchestrator:
             if key not in pares:
                 pares[key] = (lead_id_local, 0)
 
+        # Aplicar limit antes de procesar
+        pendientes = [
+            (par, datos)
+            for par, datos in pares.items()
+            if par not in ya_sincronizados
+        ]
+        resumen["ya_sincronizados"] = len(pares) - len(pendientes)
+        if limit:
+            pendientes = pendientes[:limit]
         resumen["pares_encontrados"] = len(pares)
+        print(f"sincronizar_ultimo_rdv_por_sender: {len(pendientes)} pares a procesar (workers=10)", flush=True)
 
-        for (telefono_contacto, sender), (lead_id, _row_id) in pares.items():
-            if (telefono_contacto, sender) in ya_sincronizados:
-                resumen["ya_sincronizados"] += 1
-                continue
+        cache_rdv_lock = threading.Lock()
+        resumen_lock = threading.Lock()
 
-            resumen["procesados"] += 1
+        def _procesar_par(par_datos: tuple) -> None:
+            (telefono_contacto, sender), (lead_id, _) = par_datos
 
-            if lead_id in cache_rdv:
-                rdv_party_number = cache_rdv[lead_id]
-            else:
+            # Resolver RDV con caché thread-safe
+            with cache_rdv_lock:
+                rdv_party_number = cache_rdv.get(lead_id, ...)
+            if rdv_party_number is ...:
                 rdv_party_number = self._obtener_rdv_party_number_desde_lead(lead_id)
-                cache_rdv[lead_id] = rdv_party_number
+                with cache_rdv_lock:
+                    cache_rdv[lead_id] = rdv_party_number
 
             if not rdv_party_number:
-                resumen["sin_rdv"] += 1
+                with resumen_lock:
+                    resumen["sin_rdv"] += 1
             else:
                 ok = self._registrar_ultimo_rdv_por_sender(
                     telefono_contacto=telefono_contacto,
@@ -2692,23 +2704,28 @@ class SalesOrchestrator:
                     lead_id=lead_id,
                     actualizado_masivo=True,
                 )
-                if ok:
-                    resumen["actualizados"] += 1
-                else:
-                    resumen["errores"] += 1
+                with resumen_lock:
+                    if ok:
+                        resumen["actualizados"] += 1
+                    else:
+                        resumen["errores"] += 1
 
-            if resumen["procesados"] % 100 == 0:
-                print(
-                    "sincronizar_ultimo_rdv_por_sender: progreso "
-                    f"procesados={resumen['procesados']} actualizados={resumen['actualizados']} "
-                    f"sin_rdv={resumen['sin_rdv']} errores={resumen['errores']}"
-                )
+            with resumen_lock:
+                resumen["procesados"] += 1
+                if resumen["procesados"] % 100 == 0:
+                    print(
+                        f"sincronizar_ultimo_rdv_por_sender: progreso "
+                        f"procesados={resumen['procesados']} actualizados={resumen['actualizados']} "
+                        f"sin_rdv={resumen['sin_rdv']} errores={resumen['errores']}",
+                        flush=True,
+                    )
 
-            if limit and resumen["procesados"] >= limit:
-                print(f"sincronizar_ultimo_rdv_por_sender: alcanzado limit={limit}; resumen={resumen}")
-                return resumen
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(_procesar_par, item) for item in pendientes]
+            for _ in as_completed(futures):
+                pass
 
-        print(f"sincronizar_ultimo_rdv_por_sender: completado; resumen={resumen}")
+        print(f"sincronizar_ultimo_rdv_por_sender: completado; resumen={resumen}", flush=True)
         return resumen
 
     def sincronizar_general(
