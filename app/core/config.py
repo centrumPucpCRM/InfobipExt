@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     # Reportería externa (conversation-lead relation)
     REPORTERIA_URL: str = "https://reporteria-comparativa.vercel.app/api/infobip-ext/conversation-lead-relation"
     REPORTERIA_TOKEN: str = "b230f2d0990553b7606ca2c2fad16b12847cffabaeabe6bc977d239aa1c42d36"
+    # Reportería externa (último RDV por sender) - mismo token Bearer que REPORTERIA_URL
+    REPORTERIA_SENDER_LAST_RDV_URL: str = "https://reporteria-comparativa.vercel.app/api/infobip-ext/sender-last-rdv"
     
     class Config:
         env_file = ".env"

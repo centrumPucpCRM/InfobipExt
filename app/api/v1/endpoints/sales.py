@@ -188,6 +188,14 @@ def reasignar_agente(
         agente_external_id=agente_external_id
     )
 
+    # Si la reasignación fue exitosa, actualizar el "último RDV por sender" en la
+    # reportería externa (best-effort; no afecta la respuesta de este endpoint).
+    if resultado:
+        orchestrator._registrar_ultimo_rdv_por_sender_desde_conversacion(
+            conversation_id=request.conversation_id,
+            party_number=request.party_number,
+        )
+
     return {
         "success": resultado,
         "conversation_id": request.conversation_id,
@@ -195,3 +203,35 @@ def reasignar_agente(
         "agente_external_id": agente_external_id,
         "message": "Conversación reasignada exitosamente" if resultado else "Error al reasignar conversación"
     }
+
+
+class SincronizarReporteriaRequest(BaseModel):
+    """Request para sincronizar la reportería externa (conversation-lead-relation)"""
+    limit: Optional[int] = Field(None, description="Máximo de filas incompletas a procesar en esta corrida (None = todas)", example=500)
+
+
+@router.post(
+    "/sincronizar-reporteria",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(verify_token)],
+    summary="Sincronizar reportería externa",
+    description="Rellena telefono_contacto y sender en las filas incompletas de conversation-lead-relation, usando datos locales y la cartera del lead (Oracle)."
+)
+def sincronizar_reporteria(
+    request: SincronizarReporteriaRequest = SincronizarReporteriaRequest(),
+    db: Session = Depends(get_db)
+):
+    """
+    **Sincronizar reportería externa**
+
+    Recorre las filas de `conversation-lead-relation` que están incompletas
+    (sin `telefono_contacto` y/o sin `sender`) y las completa:
+    - `telefono_contacto`: desde `conversation_ext` local (por `infobip_conversation_id`).
+    - `sender`: del `telefono_creado` compuesto local, o de la cartera del lead
+      (`CTRTipoDeCarteraLead_c`) mapeada a número Infobip.
+
+    Best-effort: las carteras no mapeadas se omiten y se reportan en la respuesta.
+    """
+    orchestrator = SalesOrchestrator(db)
+    resumen = orchestrator.sincronizar_reporteria(limit=request.limit)
+    return {"success": True, **resumen}

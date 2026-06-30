@@ -26,7 +26,30 @@ class SalesOrchestrator:
     
     Aquí iremos implementando paso a paso la lógica según necesidades
     """
-    
+
+    # Número de Infobip (campo 'from' de las plantillas) según la cartera
+    # (CTRCartera_c). Se almacena sin el prefijo '+' para que coincida con el
+    # formato que espera Infobip en el campo 'from'.
+    NUMEROS_INFOBIP_POR_CARTERA = {
+        "ALTA_DIRECCION":  "51993263826",
+        "PERU_REGIONES":   "51914158946",
+        "ME_SECTORIAL":    "51993240119",
+        "ME":              "51993240119",
+        "MADEN":           "51993240119",
+        "LIMA_GRADO":      "51914158946",
+        "INCOMPANY":       "51993263826",
+        "EXECUTIVE":       "51914158946",
+        "EE_TEC_INN_AGL":  "51993459699",
+        "EE_OPE_LOG_SCM":  "51993296673",
+        "EE_MKT_VTS_COM":  "51993370025",
+        "EE_FUERA_LIMA":   "51993296673",
+        "EE_FNZ_CON_RIE":  "51993370025",
+        "CENTRUMX_PUCP":   "51993240119",
+        "EE_AD_INCOM_B2B": "51993263826",
+        "EE_EDEX":         "51993459699",
+        "EE_EST_GES_TAL":  "51984714442",
+    }
+
     def __init__(self, db: Session):
         self.db = db
     
@@ -493,6 +516,21 @@ class SalesOrchestrator:
         except Exception:
             return None
 
+    def _obtener_numero_infobip_por_cartera(self, cartera: Optional[str]) -> Optional[str]:
+        """
+        Devuelve el número de Infobip (campo 'from' de las plantillas) que
+        corresponde a una cartera (CTRCartera_c).
+
+        Args:
+            cartera: Valor de CTRCartera_c (ej: 'ALTA_DIRECCION').
+
+        Returns:
+            El número asociado (sin '+') o None si la cartera no está mapeada.
+        """
+        if not cartera:
+            return None
+        return self.NUMEROS_INFOBIP_POR_CARTERA.get(cartera)
+
     def obtener_nombre_por_dni(self, numero_doc: str) -> Optional[str]:
         """
         Consulta Oracle Contacts por número de documento (DNI) y devuelve el
@@ -669,6 +707,23 @@ class SalesOrchestrator:
             osc_people_dni: DNI del cliente (obligatorio)
             osc_conversation_id: ID de conversación existente en Infobip (opcional)
         """
+        from_number_infobip = 0
+        produccion = 0  # 1 = producción (usa la cartera real); 0 = prueba (número fijo)
+        if produccion == 1:
+            # Obtener la cartera (CTRCartera_c) del catálogo catalogProductGroups
+            cartera = self._buscar_cartera_jp(osc_conversation_codigo_crm).get("CTRCartera_c")
+            if cartera:
+                print(f"Cartera para código {osc_conversation_codigo_crm}: {cartera}")
+            else:
+                print(f"No se encontró cartera para código {osc_conversation_codigo_crm}")
+            # Número de Infobip ('from') según la cartera; si no está mapeada
+            # queda None y enviar_template usará el número por defecto.
+            from_number_infobip = self._obtener_numero_infobip_por_cartera(cartera)
+            print(f"Número Infobip por cartera: {from_number_infobip}")
+        else:
+            from_number_infobip = "51992948046"
+            print("Modo de prueba: no se consultará la cartera en Oracle Sales Cloud.")
+            
         # Normalizar teléfono: quitar '+' al inicio, eliminar espacios,
         # si viene con duplicado de prefijo '51' al inicio (ej: '5151...')
         # eliminar el primer '51', y si viene como '9...' añadir '51' adelante.
@@ -871,6 +926,9 @@ class SalesOrchestrator:
             "osc_conversation_codigo_crm": osc_conversation_codigo_crm,
             "osc_conversation_lead_id": osc_conversation_lead_id,
             "osc_conversation_id": osc_conversation_id,
+            # Número Infobip (sender) resuelto por cartera; se usa para componer
+            # telefono_creado ("telefono_usuario;telefono_infobip") y el lookup.
+            "from_number_infobip": from_number_infobip,
         }
 
         # Crear conversación y retornar resultado
@@ -1003,16 +1061,33 @@ class SalesOrchestrator:
         
         # Obtener conversación activa
         id_people_local = people_a_usar.get("id")
-        
+
+        # Estos valores se usan en el bloque final (vincular/notificar/etiquetar).
+        # Se inicializan aquí para que siempre estén definidos aunque no se entre
+        # a ninguna rama (p. ej. si la creación de la conversación en Infobip falla).
+        lead_id = osc.get('osc_conversation_lead_id')
+        conversation_id = None
+
+        # Número Infobip (sender) resuelto: si no hay número por cartera se usa el
+        # default para que coincida con el 'from' realmente enviado.
+        telefono_infobip = osc.get("from_number_infobip") or "51992948046"
+        # telefono_creado se guarda como "telefono_usuario;telefono_infobip"
+        telefono_creado_valor = f"{telefono_final};{telefono_infobip}"
+
         # Si viene osc_conversation_id, usar esa conversación en lugar de buscar una activa
         conversation_id_proporcionado = osc.get("osc_conversation_id")
-        
+
         if conversation_id_proporcionado:
             # Usar conversación existente proporcionada
             conversacion_activa = self._obtener_conversacion_por_id(conversation_id_proporcionado)
         else:
-            # Buscar conversación activa (OPEN o WAITING más reciente) usando id local del People
-            conversacion_activa = self._obtener_conversacion_activa_infobip(id_people_local)
+            # Buscar conversación activa SOLO por la cadena compuesta
+            # (telefono_usuario;telefono_infobip). Si el número Infobip es distinto,
+            # no se reutiliza ninguna previa y se creará una conversación nueva.
+            conversacion_activa = self._obtener_conversacion_activa_infobip(
+                id_people_local,
+                telefono_creado_compuesto=telefono_creado_valor,
+            )
 
         # 1. Buscar el RDV para obtener el external_id del agente
         rdv_party_number = osc.get("osc_rdv_party_number")
@@ -1058,6 +1133,7 @@ class SalesOrchestrator:
                         existe = (
                             self.db.query(ConversationExt)
                             .filter(ConversationExt.lead_id == lead_id)
+                            .filter(ConversationExt.telefono_creado == telefono_creado_valor)
                             .first()
                         )
                         if existe:
@@ -1075,7 +1151,7 @@ class SalesOrchestrator:
                             template_name="robot_saludo_automatico",
                             seller_name=seller_name,
                             codigo_crm=osc.get('osc_conversation_codigo_crm'),
-                            from_number=None,
+                            from_number=telefono_infobip,
                             agent_id=agente_external_id,
                             language="es_PE",
                         )
@@ -1128,7 +1204,7 @@ class SalesOrchestrator:
                     id_people=id_people_local,
                     id_rdv=rdv_id_local,
                     estado_conversacion=nueva_conversacion.get("status"),
-                    telefono_creado=telefono_final,
+                    telefono_creado=telefono_creado_valor,
                     codigo_crm=codigo_crm,
                     lead_id=osc.get("osc_conversation_lead_id")
                 )
@@ -1152,6 +1228,7 @@ class SalesOrchestrator:
                     existe = (
                         self.db.query(ConversationExt)
                         .filter(ConversationExt.lead_id == lead_id)
+                        .filter(ConversationExt.telefono_creado == telefono_creado_valor)
                         .first()
                     )
                     if existe:
@@ -1207,7 +1284,7 @@ class SalesOrchestrator:
                 id_people=id_people_local,
                 id_rdv=rdv_id_local,
                 estado_conversacion=conversacion_activa.get("status"),
-                telefono_creado=telefono_final,
+                telefono_creado=telefono_creado_valor,
                 codigo_crm=codigo_crm,
                 lead_id=osc.get("osc_conversation_lead_id")
             )
@@ -1219,15 +1296,40 @@ class SalesOrchestrator:
                         template_name="robot_saludo_automatico",
                         seller_name=seller_name,
                         codigo_crm=osc.get('osc_conversation_codigo_crm'),
-                        from_number=None,
+                        from_number=telefono_infobip,
                         agent_id=agente_external_id,
                         language="es_PE",
                     )
                     print(f"Resultado envío plantilla con fallback: {resp_template}")
                 except Exception as e:
                     print(f"Error enviando plantilla con fallback: {e}")
+
+        if not conversation_id:
+            # No se pudo crear u obtener la conversación en Infobip; no continuar
+            # con vinculación/etiquetado para no usar un conversation_id inválido.
+            print("No se obtuvo conversation_id (creación/obtención en Infobip falló); se omite vinculación y etiquetado.")
+            return {
+                "success": False,
+                "error": "No se pudo crear u obtener la conversación en Infobip",
+                "person_id": person_id,
+                "telefono_final": telefono_final,
+                "osc_conversation_lead_id": lead_id,
+            }
+
         self._vincular_lead_conversation_id(lead_id,conversation_id)
-        self._notificar_relacion_lead_conversacion(lead_id, conversation_id)
+        self._notificar_relacion_lead_conversacion(
+            lead_id,
+            conversation_id,
+            sender=telefono_infobip,
+            telefono_contacto=telefono_final,
+        )
+        # Registrar el último RDV por (telefono_contacto, sender) en la reportería externa
+        self._registrar_ultimo_rdv_por_sender(
+            telefono_contacto=telefono_final,
+            sender=telefono_infobip,
+            ultimo_rdv_number=rdv_party_number,
+            lead_id=lead_id,
+        )
         self._agregar_etiqueta_conversacion(conversation_id,"CRM")
         result=self._buscar_cartera_jp(codigo_crm)
         self.asegurar_existe_etiqueta(result["CTRCartera_c"])
@@ -1352,33 +1454,47 @@ class SalesOrchestrator:
         except Exception:
             return []
     
-    def _obtener_conversacion_activa_infobip(self, id_people_local: int) -> Optional[Dict[str, Any]]:
+    def _obtener_conversacion_activa_infobip(
+        self,
+        id_people_local: int,
+        telefono_creado_compuesto: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """
-        Obtiene la conversación activa más reciente de un People.
-        
+        Obtiene la conversación activa más reciente para el par
+        (telefono_usuario;telefono_infobip).
+
+        Matching estricto: solo se considera una conversación del mismo par
+        (telefono_usuario;telefono_infobip). Si el número Infobip es distinto,
+        no se reutiliza ninguna conversación previa → se creará una nueva.
+
         Flujo:
-        1. Buscar en tabla conversation_ext por id_people el registro más reciente (último creado)
-        2. Tomar el id_conversation de ese registro
-        3. Consultar el estado de esa conversación en la API de Infobip
-        4. Si el estado es OPEN o WAITING, devolverlo
-        
+        1. Buscar en conversation_ext por la cadena compuesta `telefono_creado`
+           (telefono_usuario;telefono_infobip) el registro más reciente.
+        2. Tomar el id_conversation de ese registro.
+        3. Consultar el estado de esa conversación en la API de Infobip.
+        4. Si el estado es OPEN/WAITING/SOLVED, devolverlo.
+
         Args:
             id_people_local: ID del People en la BD local (conversation_ext.id_people)
-            
+            telefono_creado_compuesto: Cadena "telefono_usuario;telefono_infobip"
+
         Returns:
             Diccionario con la conversación activa o None si no hay o no está activa
         """
         try:
             from app.models.conversation_ext import ConversationExt
-            
-            # 1. Buscar la conversación más reciente en BD local por id_people
-            conversacion_local = (
-                self.db.query(ConversationExt)
-                .filter(ConversationExt.id_people == id_people_local)
-                .order_by(ConversationExt.created_at.desc())
-                .first()
-            )
-            
+
+            conversacion_local = None
+
+            # Buscar SOLO por la cadena compuesta (telefono_usuario;telefono_infobip).
+            if telefono_creado_compuesto:
+                conversacion_local = (
+                    self.db.query(ConversationExt)
+                    .filter(ConversationExt.telefono_creado == telefono_creado_compuesto)
+                    .order_by(ConversationExt.created_at.desc())
+                    .first()
+                )
+
             if not conversacion_local:
                 return None
             
@@ -1506,7 +1622,7 @@ class SalesOrchestrator:
                 # Topic: usar el valor pasado (si se proporciona) o el fallback por teléfono
                 "topic": topic if topic is not None else f"Conversación WhatsApp con {telefono}",
                 # "priority": "NORMAL",  # opcional
-                "queueId": "6e87a3c8-fc95-4ff2-bf65-41021b4789f5",
+                "queueId": "35947983-630a-48d1-bc4a-8a85a550d6aa",
 
             }
             print("agente_external_id: ",agente_external_id)
@@ -1685,7 +1801,7 @@ class SalesOrchestrator:
             from_number=from_number,
             language=language,
         )
-        
+
         # Si es exitoso (HTTP 200 o 201), retornar
         if resultado_principal.get("status_code") in (200, 201):
             print(f"Plantilla '{template_name}' enviada exitosamente (status {resultado_principal.get('status_code')})")
@@ -1711,7 +1827,7 @@ class SalesOrchestrator:
             print(f"Plantilla fallback 'crm_plantilla_utility' enviada exitosamente (status {resultado_fallback.get('status_code')})")
         else:
             print(f"Plantilla fallback también falló (status {resultado_fallback.get('status_code')}): {resultado_fallback.get('body', 'Error desconocido')}")
-        
+
         return resultado_fallback
 
     def enviar_template_conversacion(
@@ -1821,13 +1937,20 @@ class SalesOrchestrator:
     def _notificar_relacion_lead_conversacion(
         self,
         lead_id: str,
-        conversation_id: str
+        conversation_id: str,
+        sender: Optional[str] = None,
+        telefono_contacto: Optional[str] = None,
     ) -> bool:
         """
         Envía la relación lead_id ↔ conversation_id al servicio de reportería externa.
 
         POST https://reporteria-comparativa.vercel.app/api/infobip-ext/conversation-lead-relation
-        Body: { "infobip_conversation_id": "<conversation_id>", "lead_id": "<lead_id>" }
+        Body: {
+            "infobip_conversation_id": "<conversation_id>",
+            "lead_id": "<lead_id>",
+            "sender": "<numero_infobip>",        # opcional
+            "telefono_contacto": "<telefono_usuario>"  # opcional
+        }
 
         Es best-effort: cualquier fallo se loguea pero no interrumpe el flujo principal.
         """
@@ -1845,6 +1968,8 @@ class SalesOrchestrator:
                 json={
                     "infobip_conversation_id": conversation_id,
                     "lead_id": lead_id,
+                    "sender": sender,
+                    "telefono_contacto": telefono_contacto,
                 },
                 timeout=10,
                 allow_redirects=False,
@@ -1854,6 +1979,269 @@ class SalesOrchestrator:
         except Exception as e:
             print(f"_notificar_relacion_lead_conversacion: excepción - {e}")
             return False
+
+    def _registrar_ultimo_rdv_por_sender(
+        self,
+        telefono_contacto: Optional[str],
+        sender: Optional[str],
+        ultimo_rdv_number: Optional[int],
+        lead_id: Optional[str],
+    ) -> bool:
+        """
+        Registra/actualiza el último RDV asociado al par (telefono_contacto, sender)
+        en la reportería externa.
+
+        POST https://reporteria-comparativa.vercel.app/api/infobip-ext/sender-last-rdv
+        Body: {
+            "telefono_contacto": "<telefono_usuario>",
+            "sender": "<numero_infobip>",
+            "ultimo_rdv_number": <party_number_del_rdv>,
+            "lead_id": "<lead_id>"
+        }
+        El servidor hace UPSERT sobre (telefono_contacto, sender) y sella la fecha.
+
+        Es best-effort: cualquier fallo se loguea pero no interrumpe el flujo principal.
+        """
+        if not telefono_contacto or not sender:
+            print(f"_registrar_ultimo_rdv_por_sender: parámetros incompletos - telefono_contacto={telefono_contacto}, sender={sender}")
+            return False
+
+        try:
+            response = requests.post(
+                settings.REPORTERIA_SENDER_LAST_RDV_URL,
+                headers={
+                    "Authorization": f"Bearer {settings.REPORTERIA_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "telefono_contacto": telefono_contacto,
+                    "sender": sender,
+                    "ultimo_rdv_number": ultimo_rdv_number,
+                    "lead_id": lead_id,
+                },
+                timeout=10,
+                allow_redirects=False,
+            )
+            if response.status_code in (200, 201):
+                print(f"_registrar_ultimo_rdv_por_sender: OK status={response.status_code} contacto={telefono_contacto} sender={sender} rdv={ultimo_rdv_number}")
+                return True
+            # Según el contrato, los errores vienen como {"error": "<texto>"}
+            error_text = ""
+            try:
+                error_text = response.json().get("error", "")
+            except Exception:
+                error_text = response.text
+            print(f"_registrar_ultimo_rdv_por_sender: error status={response.status_code} - {error_text}")
+            return False
+        except Exception as e:
+            print(f"_registrar_ultimo_rdv_por_sender: excepción - {e}")
+            return False
+
+    def _registrar_ultimo_rdv_por_sender_desde_conversacion(
+        self,
+        conversation_id: str,
+        party_number: Optional[int],
+    ) -> bool:
+        """
+        Registra el último RDV por sender a partir de una conversación existente
+        (caso reasignación de vendedor).
+
+        Toma el registro más reciente de `conversation_ext` por `id_conversation`,
+        parsea `telefono_creado` ("telefono_contacto;sender") y registra el nuevo
+        `party_number` como último RDV de ese par.
+
+        Best-effort: si la conversación no existe o `telefono_creado` no trae sender
+        (formato antiguo sin ';'), se omite sin interrumpir.
+        """
+        try:
+            conv = ConversationService.get_latest_by_external_id(self.db, conversation_id)
+            if not conv or not conv.telefono_creado:
+                print(f"_registrar_ultimo_rdv_por_sender_desde_conversacion: sin conversación/telefono_creado para conv={conversation_id}")
+                return False
+
+            partes = conv.telefono_creado.split(";")
+            if len(partes) < 2 or not partes[1]:
+                print(f"_registrar_ultimo_rdv_por_sender_desde_conversacion: telefono_creado sin sender (formato antiguo) conv={conversation_id} valor='{conv.telefono_creado}'")
+                return False
+
+            telefono_contacto = partes[0]
+            sender = partes[1]
+            return self._registrar_ultimo_rdv_por_sender(
+                telefono_contacto=telefono_contacto,
+                sender=sender,
+                ultimo_rdv_number=party_number,
+                lead_id=conv.lead_id,
+            )
+        except Exception as e:
+            print(f"_registrar_ultimo_rdv_por_sender_desde_conversacion: excepción - {e}")
+            return False
+
+    def _obtener_cartera_lead(self, lead_number) -> Optional[str]:
+        """
+        Obtiene la cartera de un lead consultando Oracle por LeadNumber
+        (campo CTRTipoDeCarteraLead_c). Devuelve None si no se encuentra.
+        """
+        try:
+            url = f"{settings.ORACLE_CRM_URL}/leads"
+            headers = {
+                "Authorization": settings.ORACLE_CRM_AUTH,
+                "Content-Type": "application/json",
+            }
+            params = {
+                "q": f"LeadNumber={lead_number}",
+                "fields": "CTRTipoDeCarteraLead_c",
+                "onlyData": "true",
+                "limit": 1,
+            }
+            r = requests.get(url, params=params, headers=headers, timeout=15)
+            if r.status_code != 200:
+                return None
+            items = r.json().get("items", [])
+            if not items:
+                return None
+            return items[0].get("CTRTipoDeCarteraLead_c") or None
+        except Exception as e:
+            print(f"_obtener_cartera_lead: excepción lead={lead_number} - {e}")
+            return None
+
+    def sincronizar_reporteria(self, limit: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Sincroniza la reportería externa (conversation-lead-relation): rellena
+        `telefono_contacto` y `sender` en las filas incompletas, usando datos
+        locales y la cartera del lead (Oracle).
+
+        - telefono_contacto: de conversation_ext local (por infobip_conversation_id).
+        - sender: del telefono_creado compuesto local si existe; si no, de la
+          cartera del lead (CTRTipoDeCarteraLead_c) -> NUMEROS_INFOBIP_POR_CARTERA.
+          Carteras no mapeadas se omiten (no se escribe sender) y se reportan.
+
+        Solo escribe los campos que pudo resolver (PATCH; el externo respeta
+        anti-null). Best-effort por fila.
+
+        Args:
+            limit: máximo de filas incompletas a procesar en esta corrida.
+        """
+        from app.models.conversation_ext import ConversationExt
+
+        # 1. Mapa local: id_conversation -> telefono_creado (más reciente)
+        local: Dict[str, str] = {}
+        for idc, tel in (
+            self.db.query(ConversationExt.id_conversation, ConversationExt.telefono_creado)
+            .filter(ConversationExt.telefono_creado.isnot(None))
+            .order_by(ConversationExt.created_at.asc())
+        ):
+            if idc and tel:
+                local[idc] = tel
+
+        base = settings.REPORTERIA_URL  # conversation-lead-relation
+        headers = {
+            "Authorization": f"Bearer {settings.REPORTERIA_TOKEN}",
+            "Content-Type": "application/json",
+        }
+
+        resumen: Dict[str, Any] = {
+            "procesados": 0,
+            "actualizados": 0,
+            "sin_datos": 0,
+            "errores": 0,
+            "carteras_no_mapeadas": {},
+        }
+        cache_cartera: Dict[Any, Optional[str]] = {}
+        page = 1
+        total = 0
+        while True:
+            try:
+                r = requests.get(
+                    base,
+                    params={"page": page, "pageSize": 500, "incompletos": "true"},
+                    headers=headers,
+                    timeout=30,
+                    allow_redirects=False,
+                )
+            except Exception as e:
+                print(f"sincronizar_reporteria: GET excepción page={page} - {e}")
+                break
+            if r.status_code != 200:
+                print(f"sincronizar_reporteria: GET error page={page} status={r.status_code} body={r.text[:200]}")
+                break
+            j = r.json()
+            data = j.get("data", [])
+            total = j.get("total", total)
+            if not data:
+                break
+
+            for row in data:
+                # Filtrado client-side por seguridad (si el filtro del externo no está activo)
+                tiene_tel = bool(row.get("telefono_contacto"))
+                tiene_sender = bool(row.get("sender"))
+                if tiene_tel and tiene_sender:
+                    continue
+
+                resumen["procesados"] += 1
+                cid = row.get("infobip_conversation_id")
+                row_id = row.get("id")
+                lead_id = row.get("lead_id")
+
+                payload: Dict[str, Any] = {}
+                sender_val = None
+
+                tel_creado = local.get(cid)
+                if tel_creado:
+                    partes = tel_creado.split(";")
+                    if not tiene_tel and partes[0]:
+                        payload["telefono_contacto"] = partes[0]
+                    if len(partes) > 1 and partes[1]:
+                        sender_val = partes[1]  # sender ya viene en el compuesto local
+
+                # sender por cartera del lead (si no lo sacamos del compuesto)
+                if not tiene_sender and not sender_val and lead_id:
+                    if lead_id in cache_cartera:
+                        cartera = cache_cartera[lead_id]
+                    else:
+                        cartera = self._obtener_cartera_lead(lead_id)
+                        cache_cartera[lead_id] = cartera
+                    if cartera:
+                        num = self._obtener_numero_infobip_por_cartera(cartera)
+                        if num:
+                            sender_val = num
+                        else:
+                            resumen["carteras_no_mapeadas"][cartera] = (
+                                resumen["carteras_no_mapeadas"].get(cartera, 0) + 1
+                            )
+
+                if sender_val and not tiene_sender:
+                    payload["sender"] = sender_val
+
+                if not payload:
+                    resumen["sin_datos"] += 1
+                else:
+                    try:
+                        pr = requests.patch(
+                            f"{base}/{row_id}",
+                            json=payload,
+                            headers=headers,
+                            timeout=15,
+                            allow_redirects=False,
+                        )
+                        if pr.status_code in (200, 201):
+                            resumen["actualizados"] += 1
+                        else:
+                            resumen["errores"] += 1
+                            print(f"sincronizar_reporteria: PATCH id={row_id} status={pr.status_code} body={pr.text[:150]}")
+                    except Exception as e:
+                        resumen["errores"] += 1
+                        print(f"sincronizar_reporteria: PATCH excepción id={row_id} - {e}")
+
+                if limit and resumen["procesados"] >= limit:
+                    print(f"sincronizar_reporteria: alcanzado limit={limit}; resumen={resumen}")
+                    return resumen
+
+            if page * 500 >= total:
+                break
+            page += 1
+
+        print(f"sincronizar_reporteria: completado; resumen={resumen}")
+        return resumen
 
     def _asignar_pepople_agentPartyId(self, person_id: Optional[str], rdv_party_id: Optional[int]) -> bool:
         """
