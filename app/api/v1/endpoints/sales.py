@@ -235,3 +235,32 @@ def sincronizar_reporteria(
     orchestrator = SalesOrchestrator(db)
     resumen = orchestrator.sincronizar_reporteria(limit=request.limit)
     return {"success": True, **resumen}
+
+
+class SincronizarUltimoRdvRequest(BaseModel):
+    """Request para sincronizar la tabla externa 'último RDV por sender'"""
+    limit: Optional[int] = Field(None, description="Máximo de pares (telefono_contacto, sender) a procesar en esta corrida (None = todos)", example=500)
+
+
+@router.post(
+    "/sincronizar-ultimo-rdv",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(verify_token)],
+    summary="Sincronizar último RDV por sender",
+    description="Crea/actualiza filas en sender-last-rdv a partir de conversation-lead-relation (pares telefono_contacto+sender con su lead_id), resolviendo el RDV vigente del lead."
+)
+def sincronizar_ultimo_rdv(
+    request: SincronizarUltimoRdvRequest = SincronizarUltimoRdvRequest(),
+    db: Session = Depends(get_db)
+):
+    """
+    **Sincronizar último RDV por sender**
+
+    Recorre los pares (telefono_contacto, sender) presentes en
+    `conversation-lead-relation`, resuelve el RDV vigente a partir del
+    `lead_id` y hace UPSERT en `sender-last-rdv` (crea si no existe,
+    actualiza si ya existe).
+    """
+    orchestrator = SalesOrchestrator(db)
+    resumen = orchestrator.sincronizar_ultimo_rdv_por_sender(limit=request.limit)
+    return {"success": True, **resumen}

@@ -1986,6 +1986,7 @@ class SalesOrchestrator:
         sender: Optional[str],
         ultimo_rdv_number: Optional[int],
         lead_id: Optional[str],
+        actualizado_masivo: bool = False,
     ) -> bool:
         """
         Registra/actualiza el último RDV asociado al par (telefono_contacto, sender)
@@ -1996,9 +1997,15 @@ class SalesOrchestrator:
             "telefono_contacto": "<telefono_usuario>",
             "sender": "<numero_infobip>",
             "ultimo_rdv_number": <party_number_del_rdv>,
-            "lead_id": "<lead_id>"
+            "lead_id": "<lead_id>",
+            "actualizado_masivo": <bool>
         }
         El servidor hace UPSERT sobre (telefono_contacto, sender) y sella la fecha.
+
+        `actualizado_masivo` distingue el origen del último escritor del par:
+        True cuando lo escribe el sincronizador masivo (sincronizar_ultimo_rdv_por_sender,
+        un estimado desde Oracle), False cuando lo escribe cualquier flujo orgánico
+        (conversación real / reasignación) y por lo tanto es dato confirmado.
 
         Es best-effort: cualquier fallo se loguea pero no interrumpe el flujo principal.
         """
@@ -2018,6 +2025,7 @@ class SalesOrchestrator:
                     "sender": sender,
                     "ultimo_rdv_number": ultimo_rdv_number,
                     "lead_id": lead_id,
+                    "actualizado_masivo": actualizado_masivo,
                 },
                 timeout=10,
                 allow_redirects=False,
@@ -2241,6 +2249,232 @@ class SalesOrchestrator:
             page += 1
 
         print(f"sincronizar_reporteria: completado; resumen={resumen}")
+        return resumen
+
+    def _obtener_rdv_party_number_desde_lead(self, lead_id) -> Optional[int]:
+        """
+        Resuelve el party_number del RDV (vendedor) a partir del lead_id,
+        consultando el campo OwnerPartyNumber del lead en Oracle.
+        """
+        try:
+            url = f"{settings.ORACLE_CRM_URL}/leads"
+            headers = {
+                "Authorization": settings.ORACLE_CRM_AUTH,
+                "Content-Type": "application/json",
+            }
+            params = {
+                "q": f"LeadNumber={lead_id}",
+                "fields": "OwnerPartyNumber",
+                "onlyData": "true",
+                "limit": 1,
+            }
+            r = requests.get(url, params=params, headers=headers, timeout=15)
+            if r.status_code != 200:
+                return None
+            items = r.json().get("items", [])
+            if not items:
+                return None
+            owner_party_number = items[0].get("OwnerPartyNumber")
+            if not owner_party_number:
+                return None
+            return int(owner_party_number)
+        except Exception as e:
+            print(f"_obtener_rdv_party_number_desde_lead: excepción lead={lead_id} - {e}")
+            return None
+
+    def _obtener_pares_ya_sincronizados(self) -> set:
+        """
+        Lee sender-last-rdv y devuelve el set de pares (telefono_contacto, sender)
+        con actualizado_masivo=True, es decir, ya puestos por el propio
+        sincronizador masivo (no hace falta reprocesarlos).
+
+        Cualquier par en False (confirmado por un evento orgánico) o que no
+        exista todavía SÍ debe procesarse: el sincronizador manda y siempre
+        lo fuerza a True.
+        """
+        ya_sincronizados = set()
+        url = settings.REPORTERIA_SENDER_LAST_RDV_URL
+        headers = {
+            "Authorization": f"Bearer {settings.REPORTERIA_TOKEN}",
+            "Content-Type": "application/json",
+        }
+        page = 1
+        total = 0
+        while True:
+            try:
+                r = requests.get(
+                    url,
+                    params={"page": page, "pageSize": 500},
+                    headers=headers,
+                    timeout=30,
+                    allow_redirects=False,
+                )
+            except Exception as e:
+                print(f"_obtener_pares_ya_sincronizados: GET excepción page={page} - {e}")
+                break
+            if r.status_code != 200:
+                print(f"_obtener_pares_ya_sincronizados: GET error page={page} status={r.status_code} body={r.text[:200]}")
+                break
+            j = r.json()
+            data = j.get("data", [])
+            total = j.get("total", total)
+            if not data:
+                break
+
+            for row in data:
+                telefono_contacto = row.get("telefono_contacto")
+                sender = row.get("sender")
+                if not telefono_contacto or not sender:
+                    continue
+                if row.get("actualizado_masivo") is True:
+                    ya_sincronizados.add((telefono_contacto, sender))
+
+            if page * 500 >= total:
+                break
+            page += 1
+
+        return ya_sincronizados
+
+    def sincronizar_ultimo_rdv_por_sender(self, limit: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Sincroniza la tabla externa "último RDV por sender" (sender-last-rdv)
+        a partir de conversation-lead-relation: recorre las filas que ya tienen
+        telefono_contacto + sender, agrupa por ese par (telefono_contacto, sender)
+        y, usando el lead_id, resuelve el RDV (_obtener_rdv_party_number_desde_lead)
+        para registrarlo vía _registrar_ultimo_rdv_por_sender (UPSERT externo, crea
+        o actualiza según corresponda, marcando actualizado_masivo=True).
+
+        El sincronizador manda: fuerza a True cualquier par que esté en False
+        (confirmado orgánicamente) o que no exista todavía. Solo se saltan los
+        pares que ya están en True (puestos por una corrida anterior del propio
+        sincronizador), para no reprocesar todo en cada corrida.
+
+        Si para un mismo par (telefono_contacto, sender) existen varias filas en
+        conversation-lead-relation (varias conversaciones a lo largo del tiempo),
+        se usa el lead_id de la fila más reciente (mayor id), por si el cliente
+        pasó a un lead más nuevo.
+
+        Los pares que conversation-lead-relation no tiene completos (sender o
+        telefono_contacto en null, o ni siquiera registrados) se rellenan con
+        mi BD local (conversation_ext, vía telefono_creado="telefono;sender" +
+        lead_id), solo como fallback: si el par ya vino completo desde
+        conversation-lead-relation, ese gana.
+
+        Args:
+            limit: máximo de pares (telefono_contacto, sender) a procesar en esta corrida.
+        """
+        from app.models.conversation_ext import ConversationExt
+
+        base = settings.REPORTERIA_URL  # conversation-lead-relation
+        headers = {
+            "Authorization": f"Bearer {settings.REPORTERIA_TOKEN}",
+            "Content-Type": "application/json",
+        }
+
+        resumen: Dict[str, Any] = {
+            "pares_encontrados": 0,
+            "ya_sincronizados": 0,
+            "procesados": 0,
+            "actualizados": 0,
+            "sin_rdv": 0,
+            "errores": 0,
+        }
+        cache_rdv: Dict[Any, Optional[int]] = {}
+        # (telefono_contacto, sender) -> (lead_id, id_fila_mas_reciente)
+        pares: Dict[tuple, tuple] = {}
+
+        ya_sincronizados = self._obtener_pares_ya_sincronizados()
+
+        page = 1
+        total = 0
+        while True:
+            try:
+                r = requests.get(
+                    base,
+                    params={"page": page, "pageSize": 500},
+                    headers=headers,
+                    timeout=30,
+                    allow_redirects=False,
+                )
+            except Exception as e:
+                print(f"sincronizar_ultimo_rdv_por_sender: GET excepción page={page} - {e}")
+                break
+            if r.status_code != 200:
+                print(f"sincronizar_ultimo_rdv_por_sender: GET error page={page} status={r.status_code} body={r.text[:200]}")
+                break
+            j = r.json()
+            data = j.get("data", [])
+            total = j.get("total", total)
+            if not data:
+                break
+
+            for row in data:
+                telefono_contacto = row.get("telefono_contacto")
+                sender = row.get("sender")
+                if not telefono_contacto or not sender:
+                    continue
+                row_id = row.get("id") or 0
+                key = (telefono_contacto, sender)
+                actual = pares.get(key)
+                if actual is None or row_id > actual[1]:
+                    pares[key] = (row.get("lead_id"), row_id)
+
+            if page * 500 >= total:
+                break
+            page += 1
+
+        # Fallback: pares que conversation-lead-relation no tiene completos,
+        # rellenados desde mi BD local (no pisa lo que ya vino completo arriba).
+        for telefono_creado, lead_id_local in (
+            self.db.query(ConversationExt.telefono_creado, ConversationExt.lead_id)
+            .filter(ConversationExt.telefono_creado.isnot(None))
+            .filter(ConversationExt.lead_id.isnot(None))
+            .order_by(ConversationExt.created_at.asc())
+        ):
+            if not telefono_creado or not lead_id_local:
+                continue
+            partes = telefono_creado.split(";")
+            if len(partes) < 2 or not partes[0] or not partes[1]:
+                continue
+            key = (partes[0], partes[1])
+            if key not in pares:
+                pares[key] = (lead_id_local, 0)
+
+        resumen["pares_encontrados"] = len(pares)
+
+        for (telefono_contacto, sender), (lead_id, _row_id) in pares.items():
+            if (telefono_contacto, sender) in ya_sincronizados:
+                resumen["ya_sincronizados"] += 1
+                continue
+
+            resumen["procesados"] += 1
+
+            if lead_id in cache_rdv:
+                rdv_party_number = cache_rdv[lead_id]
+            else:
+                rdv_party_number = self._obtener_rdv_party_number_desde_lead(lead_id)
+                cache_rdv[lead_id] = rdv_party_number
+
+            if not rdv_party_number:
+                resumen["sin_rdv"] += 1
+            else:
+                ok = self._registrar_ultimo_rdv_por_sender(
+                    telefono_contacto=telefono_contacto,
+                    sender=sender,
+                    ultimo_rdv_number=rdv_party_number,
+                    lead_id=lead_id,
+                    actualizado_masivo=True,
+                )
+                if ok:
+                    resumen["actualizados"] += 1
+                else:
+                    resumen["errores"] += 1
+
+            if limit and resumen["procesados"] >= limit:
+                print(f"sincronizar_ultimo_rdv_por_sender: alcanzado limit={limit}; resumen={resumen}")
+                return resumen
+
+        print(f"sincronizar_ultimo_rdv_por_sender: completado; resumen={resumen}")
         return resumen
 
     def _asignar_pepople_agentPartyId(self, person_id: Optional[str], rdv_party_id: Optional[int]) -> bool:
