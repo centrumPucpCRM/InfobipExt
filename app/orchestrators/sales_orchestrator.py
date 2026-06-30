@@ -2166,6 +2166,7 @@ class SalesOrchestrator:
         cache_cartera: Dict[Any, Optional[str]] = {}
         page = 1
         total = 0
+        print("sincronizar_reporteria: inicio")
         while True:
             try:
                 r = requests.get(
@@ -2253,6 +2254,13 @@ class SalesOrchestrator:
                     print(f"sincronizar_reporteria: alcanzado limit={limit}; resumen={resumen}")
                     return resumen
 
+                if resumen["procesados"] % 100 == 0:
+                    print(
+                        "sincronizar_reporteria: progreso "
+                        f"procesados={resumen['procesados']} actualizados={resumen['actualizados']} "
+                        f"sin_datos={resumen['sin_datos']} errores={resumen['errores']}"
+                    )
+
             if page * 500 >= total:
                 break
             page += 1
@@ -2337,6 +2345,7 @@ class SalesOrchestrator:
             "omitidos_sin_datos": 0,
         }
         batch: list[Dict[str, Any]] = []
+        print("sincronizar_historico_conversaciones: inicio")
 
         def enviar_lote(lote: list[Dict[str, Any]]) -> None:
             if not lote:
@@ -2352,6 +2361,11 @@ class SalesOrchestrator:
                 if resp.status_code in (200, 201, 207):
                     resumen["lotes_enviados"] += 1
                     resumen["enviados"] += len(lote)
+                    print(
+                        "sincronizar_historico_conversaciones: lote enviado "
+                        f"tamano={len(lote)} enviados={resumen['enviados']} "
+                        f"lotes={resumen['lotes_enviados']} errores={resumen['lotes_error']}"
+                    )
                 else:
                     resumen["lotes_error"] += 1
                     print(f"sincronizar_historico_conversaciones: POST error status={resp.status_code} body={resp.text[:200]}")
@@ -2393,6 +2407,13 @@ class SalesOrchestrator:
             if len(batch) >= batch_size:
                 enviar_lote(batch)
                 batch = []
+
+            if resumen["candidatos"] % 100 == 0:
+                print(
+                    "sincronizar_historico_conversaciones: progreso "
+                    f"candidatos={resumen['candidatos']} enviados={resumen['enviados']} "
+                    f"lotes={resumen['lotes_enviados']} errores={resumen['lotes_error']}"
+                )
 
         if batch:
             enviar_lote(batch)
@@ -2535,6 +2556,7 @@ class SalesOrchestrator:
         pares: Dict[tuple, tuple] = {}
 
         ya_sincronizados = self._obtener_pares_ya_sincronizados()
+        print("sincronizar_ultimo_rdv_por_sender: inicio")
 
         page = 1
         total = 0
@@ -2620,6 +2642,13 @@ class SalesOrchestrator:
                     resumen["actualizados"] += 1
                 else:
                     resumen["errores"] += 1
+
+            if resumen["procesados"] % 100 == 0:
+                print(
+                    "sincronizar_ultimo_rdv_por_sender: progreso "
+                    f"procesados={resumen['procesados']} actualizados={resumen['actualizados']} "
+                    f"sin_rdv={resumen['sin_rdv']} errores={resumen['errores']}"
+                )
 
             if limit and resumen["procesados"] >= limit:
                 print(f"sincronizar_ultimo_rdv_por_sender: alcanzado limit={limit}; resumen={resumen}")
