@@ -1622,7 +1622,7 @@ class SalesOrchestrator:
                 # Topic: usar el valor pasado (si se proporciona) o el fallback por teléfono
                 "topic": topic if topic is not None else f"Conversación WhatsApp con {telefono}",
                 # "priority": "NORMAL",  # opcional
-                "queueId": "35947983-630a-48d1-bc4a-8a85a550d6aa",
+                "queueId": "6e87a3c8-fc95-4ff2-bf65-41021b4789f5",
 
             }
             print("agente_external_id: ",agente_external_id)
