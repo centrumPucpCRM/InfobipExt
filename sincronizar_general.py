@@ -25,10 +25,6 @@ from app.core.database import SessionLocal  # noqa: E402
 from app.orchestrators.sales_orchestrator import SalesOrchestrator  # noqa: E402
 
 
-def _parse_date(value: str) -> date:
-    return date.fromisoformat(value)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sincronizador general de InfobipExt")
     parser.add_argument("--batch-size", type=int, default=500)
