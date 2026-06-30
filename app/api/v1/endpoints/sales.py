@@ -267,6 +267,48 @@ def sincronizar_ultimo_rdv(
     return {"success": True, **resumen}
 
 
+class MigrarHistoricoRequest(BaseModel):
+    """Request para la migración histórica de conversaciones a Reportería"""
+    cutoff_date: date = Field(default=date(2026, 6, 7), description="Fecha de corte (exclusivo): se migran conversaciones anteriores a esta fecha")
+    batch_size: int = Field(default=500, ge=1, le=500, description="Tamaño de cada lote enviado a Reportería")
+    limit: Optional[int] = Field(None, description="Límite de candidatos a procesar en esta corrida", example=1000)
+    exclude_lead_ids: List[str] = Field(default_factory=lambda: ["2033645"], description="Lead IDs a excluir")
+    exclude_telefonos: List[str] = Field(default_factory=lambda: ["51960300000"], description="Teléfonos a excluir")
+
+
+@router.post(
+    "/migrar-historico",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(verify_token)],
+    summary="Migración histórica de conversaciones",
+    description="Paso 1 del flujo general: envía las conversaciones históricas (pre-corte) a conversation-lead-relation de Reportería, omitiendo las que ya existen."
+)
+def migrar_historico(
+    request: MigrarHistoricoRequest = MigrarHistoricoRequest(),
+    db: Session = Depends(get_db)
+):
+    """
+    **Migración histórica de conversaciones**
+
+    Extrae del SQLite local las conversaciones anteriores a `cutoff_date`
+    (una por `id_conversation`, la fila más reciente) y las envía en lotes
+    al endpoint `conversation-lead-relation` de Reportería.
+
+    Solo envía las que aún no existen (skip-set por `infobip_conversation_id`).
+    `sender` siempre se envía como `null` — el sincronizador de reportería
+    completa ese campo en el paso 2.
+    """
+    orchestrator = SalesOrchestrator(db)
+    resumen = orchestrator.sincronizar_historico_conversaciones(
+        cutoff_date=request.cutoff_date,
+        batch_size=request.batch_size,
+        limit=request.limit,
+        exclude_lead_ids=request.exclude_lead_ids,
+        exclude_telefonos=request.exclude_telefonos,
+    )
+    return {"success": True, **resumen}
+
+
 class SincronizarGeneralRequest(BaseModel):
     """Request para el sincronizador general (histórico + reportería + último RDV)."""
     cutoff_date: date = Field(default=date(2026, 6, 7), description="Corte histórico para incluir todo el 6-jun y no dejar huecos")

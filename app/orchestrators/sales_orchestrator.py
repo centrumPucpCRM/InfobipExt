@@ -7,6 +7,8 @@ from datetime import datetime, date, time as datetime_time
 import requests
 import smtplib
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import re
@@ -2164,9 +2166,13 @@ class SalesOrchestrator:
             "carteras_no_mapeadas": {},
         }
         cache_cartera: Dict[Any, Optional[str]] = {}
-        page = 1
-        total = 0
-        print("sincronizar_reporteria: inicio")
+        cache_lock = threading.Lock()
+        resumen_lock = threading.Lock()
+
+        # 2. Recolectar todas las filas incompletas (respetando limit)
+        pendientes = []
+        page, total = 1, 0
+        print("sincronizar_reporteria: recolectando filas incompletas...", flush=True)
         while True:
             try:
                 r = requests.get(
@@ -2187,85 +2193,97 @@ class SalesOrchestrator:
             total = j.get("total", total)
             if not data:
                 break
-
             for row in data:
-                # Filtrado client-side por seguridad (si el filtro del externo no está activo)
                 tiene_tel = bool(row.get("telefono_contacto"))
                 tiene_sender = bool(row.get("sender"))
                 if tiene_tel and tiene_sender:
                     continue
+                pendientes.append(row)
+                if limit and len(pendientes) >= limit:
+                    break
+            if (limit and len(pendientes) >= limit) or page * 500 >= total:
+                break
+            page += 1
+        print(f"sincronizar_reporteria: {len(pendientes)} filas a procesar (workers=10)", flush=True)
 
-                resumen["procesados"] += 1
-                cid = row.get("infobip_conversation_id")
-                row_id = row.get("id")
-                lead_id = row.get("lead_id")
+        def _procesar_fila(row: Dict[str, Any]) -> None:
+            tiene_tel = bool(row.get("telefono_contacto"))
+            tiene_sender = bool(row.get("sender"))
+            cid = row.get("infobip_conversation_id")
+            row_id = row.get("id")
+            lead_id = row.get("lead_id")
 
-                payload: Dict[str, Any] = {}
-                sender_val = None
+            payload: Dict[str, Any] = {}
+            sender_val = None
 
-                tel_creado = local.get(cid)
-                if tel_creado:
-                    partes = tel_creado.split(";")
-                    if not tiene_tel and partes[0]:
-                        payload["telefono_contacto"] = partes[0]
-                    if len(partes) > 1 and partes[1]:
-                        sender_val = partes[1]  # sender ya viene en el compuesto local
+            tel_creado = local.get(cid)
+            if tel_creado:
+                partes = tel_creado.split(";")
+                if not tiene_tel and partes[0]:
+                    payload["telefono_contacto"] = partes[0]
+                if len(partes) > 1 and partes[1]:
+                    sender_val = partes[1]
 
-                # sender por cartera del lead (si no lo sacamos del compuesto)
-                if not tiene_sender and not sender_val and lead_id:
-                    if lead_id in cache_cartera:
-                        cartera = cache_cartera[lead_id]
-                    else:
-                        cartera = self._obtener_cartera_lead(lead_id)
+            if not tiene_sender and not sender_val and lead_id:
+                with cache_lock:
+                    cartera = cache_cartera.get(lead_id, ...)
+                if cartera is ...:
+                    cartera = self._obtener_cartera_lead(lead_id)
+                    with cache_lock:
                         cache_cartera[lead_id] = cartera
-                    if cartera:
-                        num = self._obtener_numero_infobip_por_cartera(cartera)
-                        if num:
-                            sender_val = num
-                        else:
+                if cartera:
+                    num = self._obtener_numero_infobip_por_cartera(cartera)
+                    if num:
+                        sender_val = num
+                    else:
+                        with resumen_lock:
                             resumen["carteras_no_mapeadas"][cartera] = (
                                 resumen["carteras_no_mapeadas"].get(cartera, 0) + 1
                             )
 
-                if sender_val and not tiene_sender:
-                    payload["sender"] = sender_val
+            if sender_val and not tiene_sender:
+                payload["sender"] = sender_val
 
-                if not payload:
+            if not payload:
+                with resumen_lock:
                     resumen["sin_datos"] += 1
-                else:
-                    try:
-                        pr = requests.patch(
-                            f"{base}/{row_id}",
-                            json=payload,
-                            headers=headers,
-                            timeout=15,
-                            allow_redirects=False,
-                        )
+            else:
+                try:
+                    pr = requests.patch(
+                        f"{base}/{row_id}",
+                        json=payload,
+                        headers=headers,
+                        timeout=15,
+                        allow_redirects=False,
+                    )
+                    with resumen_lock:
                         if pr.status_code in (200, 201):
                             resumen["actualizados"] += 1
                         else:
                             resumen["errores"] += 1
                             print(f"sincronizar_reporteria: PATCH id={row_id} status={pr.status_code} body={pr.text[:150]}")
-                    except Exception as e:
+                except Exception as e:
+                    with resumen_lock:
                         resumen["errores"] += 1
-                        print(f"sincronizar_reporteria: PATCH excepción id={row_id} - {e}")
+                    print(f"sincronizar_reporteria: PATCH excepción id={row_id} - {e}")
 
-                if limit and resumen["procesados"] >= limit:
-                    print(f"sincronizar_reporteria: alcanzado limit={limit}; resumen={resumen}")
-                    return resumen
-
+            with resumen_lock:
+                resumen["procesados"] += 1
                 if resumen["procesados"] % 100 == 0:
                     print(
-                        "sincronizar_reporteria: progreso "
-                        f"procesados={resumen['procesados']} actualizados={resumen['actualizados']} "
-                        f"sin_datos={resumen['sin_datos']} errores={resumen['errores']}"
+                        f"sincronizar_reporteria: progreso procesados={resumen['procesados']} "
+                        f"actualizados={resumen['actualizados']} sin_datos={resumen['sin_datos']} "
+                        f"errores={resumen['errores']}",
+                        flush=True,
                     )
 
-            if page * 500 >= total:
-                break
-            page += 1
+        # 3. Procesar en paralelo
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(_procesar_fila, row) for row in pendientes]
+            for _ in as_completed(futures):
+                pass
 
-        print(f"sincronizar_reporteria: completado; resumen={resumen}")
+        print(f"sincronizar_reporteria: completado; resumen={resumen}", flush=True)
         return resumen
 
     def sincronizar_historico_conversaciones(
@@ -2335,8 +2353,39 @@ class SalesOrchestrator:
             "Content-Type": "application/json",
         }
 
+        # Skip-set: IDs que ya existen en Reportería → no re-enviar
+        existing_ids: set = set()
+        skip_page, skip_total = 1, 0
+        while True:
+            try:
+                r_skip = requests.get(
+                    base,
+                    params={"page": skip_page, "pageSize": 500},
+                    headers=headers,
+                    timeout=30,
+                    allow_redirects=False,
+                )
+            except Exception as e:
+                print(f"sincronizar_historico_conversaciones: GET skip-set excepción page={skip_page} - {e}")
+                break
+            if r_skip.status_code != 200:
+                print(f"sincronizar_historico_conversaciones: GET skip-set error status={r_skip.status_code}")
+                break
+            j_skip = r_skip.json()
+            data_skip = j_skip.get("data", [])
+            skip_total = j_skip.get("total", skip_total)
+            for row_s in data_skip:
+                cid = row_s.get("infobip_conversation_id")
+                if cid:
+                    existing_ids.add(cid)
+            if not data_skip or skip_page * 500 >= skip_total:
+                break
+            skip_page += 1
+        print(f"sincronizar_historico_conversaciones: skip-set={len(existing_ids)} ya en Reportería", flush=True)
+
         resumen: Dict[str, Any] = {
             "candidatos": 0,
+            "ya_existentes": 0,
             "enviados": 0,
             "lotes_enviados": 0,
             "lotes_error": 0,
@@ -2345,7 +2394,7 @@ class SalesOrchestrator:
             "omitidos_sin_datos": 0,
         }
         batch: list[Dict[str, Any]] = []
-        print("sincronizar_historico_conversaciones: inicio")
+        print("sincronizar_historico_conversaciones: inicio", flush=True)
 
         def enviar_lote(lote: list[Dict[str, Any]]) -> None:
             if not lote:
@@ -2378,6 +2427,10 @@ class SalesOrchestrator:
                 break
 
             resumen["candidatos"] += 1
+
+            if row.id_conversation in existing_ids:
+                resumen["ya_existentes"] += 1
+                continue
 
             lead_id = str(row.lead_id).strip() if row.lead_id is not None else ""
             if lead_id in exclude_lead_set:
