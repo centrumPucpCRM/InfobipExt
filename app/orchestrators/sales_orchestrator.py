@@ -2288,7 +2288,6 @@ class SalesOrchestrator:
 
     def sincronizar_historico_conversaciones(
         self,
-        cutoff_date: date = date(2026, 6, 7),
         batch_size: int = 500,
         limit: Optional[int] = None,
         exclude_lead_ids: Optional[list[str]] = None,
@@ -2297,15 +2296,18 @@ class SalesOrchestrator:
         """
         Primera etapa del flujo general.
 
-        Envía el histórico local a `conversation-lead-relation` por lotes,
+        Envía TODAS las conversaciones locales a `conversation-lead-relation`,
         preservando `created_at` y `updated_at` originales.
+
+        El skip-set (GET previo a Reportería) es quien decide qué se manda:
+        si ya existe en Reportería se salta, si no existe se manda.
+        No hay filtro por fecha — la temporalidad no importa.
 
         En esta etapa `sender` siempre se envía como `None`.
         """
         from app.models.conversation_ext import ConversationExt
         from sqlalchemy import func
 
-        cutoff_dt = datetime.combine(cutoff_date, datetime_time.min)
         exclude_lead_set = {str(item).strip() for item in (exclude_lead_ids or []) if str(item).strip()}
         exclude_phone_set = {str(item).strip() for item in (exclude_telefonos or []) if str(item).strip()}
         batch_size = max(1, int(batch_size or 500))
@@ -2326,7 +2328,6 @@ class SalesOrchestrator:
             .filter(ConversationExt.lead_id.isnot(None))
             .filter(ConversationExt.telefono_creado.isnot(None))
             .filter(ConversationExt.telefono_creado != "")
-            .filter(ConversationExt.created_at < cutoff_dt)
         )
 
         if exclude_lead_set:
@@ -2712,7 +2713,6 @@ class SalesOrchestrator:
 
     def sincronizar_general(
         self,
-        cutoff_date: date = date(2026, 6, 7),
         batch_size: int = 500,
         historico_limit: Optional[int] = None,
         reporteria_limit: Optional[int] = None,
@@ -2722,12 +2722,11 @@ class SalesOrchestrator:
     ) -> Dict[str, Any]:
         """
         Orquesta los 3 sincronizadores en el orden lógico acordado:
-        1. Histórico
-        2. Reportería incompleta
+        1. Histórico (todas las conversaciones locales no existentes en Reportería)
+        2. Reportería incompleta (rellena telefono_contacto y sender faltantes)
         3. Último RDV por sender
         """
         historico = self.sincronizar_historico_conversaciones(
-            cutoff_date=cutoff_date,
             batch_size=batch_size,
             limit=historico_limit,
             exclude_lead_ids=exclude_lead_ids,
