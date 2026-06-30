@@ -1,7 +1,8 @@
 """
 Sales Router - Orchestrated sales processes
 """
-from typing import Dict, Any, Optional
+from datetime import date
+from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -263,4 +264,47 @@ def sincronizar_ultimo_rdv(
     """
     orchestrator = SalesOrchestrator(db)
     resumen = orchestrator.sincronizar_ultimo_rdv_por_sender(limit=request.limit)
+    return {"success": True, **resumen}
+
+
+class SincronizarGeneralRequest(BaseModel):
+    """Request para el sincronizador general (histórico + reportería + último RDV)."""
+    cutoff_date: date = Field(default=date(2026, 6, 7), description="Corte histórico para incluir todo el 6-jun y no dejar huecos")
+    batch_size: int = Field(default=500, ge=1, le=500, description="Tamaño máximo de cada lote histórico")
+    historico_limit: Optional[int] = Field(None, description="Límite de registros históricos a procesar en esta corrida", example=1000)
+    reporteria_limit: Optional[int] = Field(None, description="Límite de filas incompletas para el sincronizador de reportería", example=500)
+    ultimo_rdv_limit: Optional[int] = Field(None, description="Límite de pares para el sincronizador de último RDV", example=500)
+    exclude_lead_ids: List[str] = Field(default_factory=lambda: ["2033645"], description="Leads a excluir del histórico")
+    exclude_telefonos: List[str] = Field(default_factory=lambda: ["51960300000"], description="Teléfonos a excluir del histórico")
+
+
+@router.post(
+    "/sincronizar-general",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(verify_token)],
+    summary="Sincronizador general",
+    description="Ejecuta histórico, reportería incompleta y último RDV por sender en el orden lógico acordado."
+)
+def sincronizar_general(
+    request: SincronizarGeneralRequest = SincronizarGeneralRequest(),
+    db: Session = Depends(get_db)
+):
+    """
+    **Sincronizador general**
+
+    Orden lógico:
+    1. Backfill histórico a reportería externa.
+    2. Completar filas incompletas de conversation-lead-relation.
+    3. Actualizar sender-last-rdv con el último RDV por sender.
+    """
+    orchestrator = SalesOrchestrator(db)
+    resumen = orchestrator.sincronizar_general(
+        cutoff_date=request.cutoff_date,
+        batch_size=request.batch_size,
+        historico_limit=request.historico_limit,
+        reporteria_limit=request.reporteria_limit,
+        ultimo_rdv_limit=request.ultimo_rdv_limit,
+        exclude_lead_ids=request.exclude_lead_ids,
+        exclude_telefonos=request.exclude_telefonos,
+    )
     return {"success": True, **resumen}

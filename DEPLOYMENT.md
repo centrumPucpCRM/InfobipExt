@@ -18,7 +18,7 @@ Comando para subir el .env:
 free -h
 --------------------------------------
 Comando para obtener los datos de la bd (pull):
-scp -i "infobip.pem" ec2-user@xx:/home/ec2-user/infobip/InfobipExt/infobip.db C:\Users\Windows\Downloads\InfobipExt\
+scp -i "infobip.pem" ec2-user@xx:/home/ec2-user/infobip/InfobipExt/infobip.db C:\Users\Windows\Downloads\
 
 scp -i "infobip.pem" ec2-user@44.212.240.212:/home/ec2-user/infobip/InfobipExt/infobip.db C:\Users\Windows\Downloads\InfobipExt\
 

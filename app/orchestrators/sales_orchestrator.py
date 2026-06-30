@@ -3,7 +3,7 @@ Sales Orchestrator - Contiene los flujos de venta directamente
 """
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, date, time as datetime_time
 import requests
 import smtplib
 import time
@@ -530,6 +530,13 @@ class SalesOrchestrator:
         if not cartera:
             return None
         return self.NUMEROS_INFOBIP_POR_CARTERA.get(cartera)
+
+    def _extraer_telefono_principal(self, telefono_creado: Optional[str]) -> Optional[str]:
+        """Devuelve el teléfono base desde el campo compuesto `telefono_creado`."""
+        if not telefono_creado:
+            return None
+        telefono = telefono_creado.split(";")[0].strip()
+        return telefono or None
 
     def obtener_nombre_por_dni(self, numero_doc: str) -> Optional[str]:
         """
@@ -2114,6 +2121,8 @@ class SalesOrchestrator:
 
     def sincronizar_reporteria(self, limit: Optional[int] = None) -> Dict[str, Any]:
         """
+        Segunda etapa del flujo general.
+
         Sincroniza la reportería externa (conversation-lead-relation): rellena
         `telefono_contacto` y `sender` en las filas incompletas, usando datos
         locales y la cartera del lead (Oracle).
@@ -2251,6 +2260,146 @@ class SalesOrchestrator:
         print(f"sincronizar_reporteria: completado; resumen={resumen}")
         return resumen
 
+    def sincronizar_historico_conversaciones(
+        self,
+        cutoff_date: date = date(2026, 6, 7),
+        batch_size: int = 500,
+        limit: Optional[int] = None,
+        exclude_lead_ids: Optional[list[str]] = None,
+        exclude_telefonos: Optional[list[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Primera etapa del flujo general.
+
+        Envía el histórico local a `conversation-lead-relation` por lotes,
+        preservando `created_at` y `updated_at` originales.
+
+        En esta etapa `sender` siempre se envía como `None`.
+        """
+        from app.models.conversation_ext import ConversationExt
+        from sqlalchemy import func
+
+        cutoff_dt = datetime.combine(cutoff_date, datetime_time.min)
+        exclude_lead_set = {str(item).strip() for item in (exclude_lead_ids or []) if str(item).strip()}
+        exclude_phone_set = {str(item).strip() for item in (exclude_telefonos or []) if str(item).strip()}
+        batch_size = max(1, int(batch_size or 500))
+
+        rows = (
+            self.db.query(
+                ConversationExt.id.label("id"),
+                ConversationExt.id_conversation.label("id_conversation"),
+                ConversationExt.lead_id.label("lead_id"),
+                ConversationExt.telefono_creado.label("telefono_creado"),
+                ConversationExt.created_at.label("created_at"),
+                ConversationExt.updated_at.label("updated_at"),
+                func.row_number().over(
+                    partition_by=ConversationExt.id_conversation,
+                    order_by=(ConversationExt.created_at.desc(), ConversationExt.id.desc()),
+                ).label("rn"),
+            )
+            .filter(ConversationExt.lead_id.isnot(None))
+            .filter(ConversationExt.telefono_creado.isnot(None))
+            .filter(ConversationExt.telefono_creado != "")
+            .filter(ConversationExt.created_at < cutoff_dt)
+        )
+
+        if exclude_lead_set:
+            rows = rows.filter(~ConversationExt.lead_id.in_(exclude_lead_set))
+
+        deduplicados = rows.subquery()
+        candidatos = (
+            self.db.query(
+                deduplicados.c.id,
+                deduplicados.c.id_conversation,
+                deduplicados.c.lead_id,
+                deduplicados.c.telefono_creado,
+                deduplicados.c.created_at,
+                deduplicados.c.updated_at,
+            )
+            .filter(deduplicados.c.rn == 1)
+            .order_by(deduplicados.c.created_at.asc(), deduplicados.c.id.asc())
+            .all()
+        )
+
+        base = settings.REPORTERIA_URL
+        headers = {
+            "Authorization": f"Bearer {settings.REPORTERIA_TOKEN}",
+            "Content-Type": "application/json",
+        }
+
+        resumen: Dict[str, Any] = {
+            "candidatos": 0,
+            "enviados": 0,
+            "lotes_enviados": 0,
+            "lotes_error": 0,
+            "excluidos_lead": 0,
+            "excluidos_telefono": 0,
+            "omitidos_sin_datos": 0,
+        }
+        batch: list[Dict[str, Any]] = []
+
+        def enviar_lote(lote: list[Dict[str, Any]]) -> None:
+            if not lote:
+                return
+            try:
+                resp = requests.post(
+                    base,
+                    headers=headers,
+                    json=lote,
+                    timeout=60,
+                    allow_redirects=False,
+                )
+                if resp.status_code in (200, 201, 207):
+                    resumen["lotes_enviados"] += 1
+                    resumen["enviados"] += len(lote)
+                else:
+                    resumen["lotes_error"] += 1
+                    print(f"sincronizar_historico_conversaciones: POST error status={resp.status_code} body={resp.text[:200]}")
+            except Exception as e:
+                resumen["lotes_error"] += 1
+                print(f"sincronizar_historico_conversaciones: POST excepción - {e}")
+
+        for row in candidatos:
+            if limit is not None and resumen["candidatos"] >= limit:
+                break
+
+            resumen["candidatos"] += 1
+
+            lead_id = str(row.lead_id).strip() if row.lead_id is not None else ""
+            if lead_id in exclude_lead_set:
+                resumen["excluidos_lead"] += 1
+                continue
+
+            telefono_principal = self._extraer_telefono_principal(row.telefono_creado)
+            if telefono_principal and telefono_principal in exclude_phone_set:
+                resumen["excluidos_telefono"] += 1
+                continue
+
+            if not telefono_principal:
+                resumen["omitidos_sin_datos"] += 1
+                continue
+
+            batch.append(
+                {
+                    "infobip_conversation_id": row.id_conversation,
+                    "lead_id": lead_id,
+                    "telefono_contacto": telefono_principal,
+                    "sender": None,
+                    "created_at": row.created_at.isoformat(sep=" ") if row.created_at else None,
+                    "updated_at": row.updated_at.isoformat(sep=" ") if row.updated_at else None,
+                }
+            )
+
+            if len(batch) >= batch_size:
+                enviar_lote(batch)
+                batch = []
+
+        if batch:
+            enviar_lote(batch)
+
+        print(f"sincronizar_historico_conversaciones: completado; resumen={resumen}")
+        return resumen
+
     def _obtener_rdv_party_number_desde_lead(self, lead_id) -> Optional[int]:
         """
         Resuelve el party_number del RDV (vendedor) a partir del lead_id,
@@ -2337,6 +2486,8 @@ class SalesOrchestrator:
 
     def sincronizar_ultimo_rdv_por_sender(self, limit: Optional[int] = None) -> Dict[str, Any]:
         """
+        Tercera etapa del flujo general.
+
         Sincroniza la tabla externa "último RDV por sender" (sender-last-rdv)
         a partir de conversation-lead-relation: recorre las filas que ya tienen
         telefono_contacto + sender, agrupa por ese par (telefono_contacto, sender)
@@ -2476,6 +2627,38 @@ class SalesOrchestrator:
 
         print(f"sincronizar_ultimo_rdv_por_sender: completado; resumen={resumen}")
         return resumen
+
+    def sincronizar_general(
+        self,
+        cutoff_date: date = date(2026, 6, 7),
+        batch_size: int = 500,
+        historico_limit: Optional[int] = None,
+        reporteria_limit: Optional[int] = None,
+        ultimo_rdv_limit: Optional[int] = None,
+        exclude_lead_ids: Optional[list[str]] = None,
+        exclude_telefonos: Optional[list[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Orquesta los 3 sincronizadores en el orden lógico acordado:
+        1. Histórico
+        2. Reportería incompleta
+        3. Último RDV por sender
+        """
+        historico = self.sincronizar_historico_conversaciones(
+            cutoff_date=cutoff_date,
+            batch_size=batch_size,
+            limit=historico_limit,
+            exclude_lead_ids=exclude_lead_ids,
+            exclude_telefonos=exclude_telefonos,
+        )
+        reporteria = self.sincronizar_reporteria(limit=reporteria_limit)
+        ultimo_rdv = self.sincronizar_ultimo_rdv_por_sender(limit=ultimo_rdv_limit)
+
+        return {
+            "historico": historico,
+            "reporteria": reporteria,
+            "ultimo_rdv": ultimo_rdv,
+        }
 
     def _asignar_pepople_agentPartyId(self, person_id: Optional[str], rdv_party_id: Optional[int]) -> bool:
         """
