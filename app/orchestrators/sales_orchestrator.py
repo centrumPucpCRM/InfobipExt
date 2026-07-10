@@ -1362,6 +1362,8 @@ class SalesOrchestrator:
             lead_id=lead_id,
         )
         self._agregar_etiqueta_conversacion(conversation_id,"CRM")
+        self.asegurar_existe_etiqueta("Nuevo Lead")
+        self._agregar_etiqueta_conversacion(conversation_id,"Nuevo Lead")
         result=self._buscar_cartera_jp(codigo_crm)
         self.asegurar_existe_etiqueta(result["CTRCartera_c"])
         self.asegurar_existe_etiqueta(result["CTRJefeDeProducto_c"])
