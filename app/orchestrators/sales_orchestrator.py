@@ -52,6 +52,23 @@ class SalesOrchestrator:
         "EE_EST_GES_TAL":  "51984714442",
     }
 
+    # Cola por defecto ("Comercial") usada cuando el sender no tiene cola GEN
+    # mapeada (p. ej. el número de prueba 51992948046 cuando produccion = 0).
+    QUEUE_ID_DEFAULT = "6e87a3c8-fc95-4ff2-bf65-41021b4789f5"
+
+    # Cola GEN (autoasignación) de cada número Infobip. Al crear una conversación
+    # la cola se resuelve con el mismo sender que se usa como 'from' del template,
+    # de modo que la conversación nace en la cola del equipo dueño de esa línea.
+    QUEUES_GEN_POR_NUMERO = {
+        "51993263826": "004e3f2c-042e-442e-a139-ea84e443d213",  # GEN: EE Alta dirección e Incompany
+        "51914158946": "0d971108-e6dc-4236-bae8-653ebb79e604",  # GEN: MBA y Executive
+        "51993240119": "35947983-630a-48d1-bc4a-8a85a550d6aa",  # GEN: ME y CX
+        "51993459699": "87055fc2-386f-48d4-ac56-aadcd7042974",  # GEN: EE Tecnología y EdEx
+        "51993296673": "9eb28571-a40e-4edf-8315-6a855335d783",  # GEN: EE Operaciones y Sectoriales
+        "51993370025": "1c7f987d-538b-4b61-a758-088def97d448",  # GEN: EE Marketing y Finanzas
+        "51984714442": "8024e182-3322-4ee1-840d-08faa5635983",  # GEN: EE Estrategia y Talento
+    }
+
     def __init__(self, db: Session):
         self.db = db
     
@@ -1118,11 +1135,16 @@ class SalesOrchestrator:
             # No hay conversación activa → Crear nueva conversación
             
             # 2. Crear conversación en Infobip
+            # La cola GEN se resuelve por el sender; si no hay mapeo (p. ej.
+            # número de prueba en produccion = 0) cae en QUEUE_ID_DEFAULT.
+            queue_id_gen = self.QUEUES_GEN_POR_NUMERO.get(telefono_infobip)
+            print(f"Cola GEN para sender {telefono_infobip}: {queue_id_gen or 'default (Comercial)'}")
             topic_str = f"Dni: {osc.get('osc_people_dni')} Telefono: {telefono_final} Nombre: (completar)"
             nueva_conversacion = self._crear_conversacion_infobip(
                 telefono=telefono_final,
                 agente_external_id=agente_external_id,
-                topic=topic_str
+                topic=topic_str,
+                queue_id=queue_id_gen
             )
             
             if nueva_conversacion and nueva_conversacion.get("id"):
@@ -1605,7 +1627,8 @@ class SalesOrchestrator:
         self,
         telefono: str,
         agente_external_id: Optional[str] = None,
-        topic: Optional[str] = None
+        topic: Optional[str] = None,
+        queue_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Crea una nueva conversación en Infobip.
@@ -1613,6 +1636,7 @@ class SalesOrchestrator:
         Args:
             telefono: Teléfono del cliente (solo lo usamos como contexto, no se envía como campo dedicado).
             agente_external_id: ID del agente (en tu caso, el que mapeas a agentId).
+            queue_id: Cola destino; si es None se usa QUEUE_ID_DEFAULT ("Comercial").
 
         Returns:
             Diccionario con la conversación creada o None si falló
@@ -1631,7 +1655,7 @@ class SalesOrchestrator:
                 # Topic: usar el valor pasado (si se proporciona) o el fallback por teléfono
                 "topic": topic if topic is not None else f"Conversación WhatsApp con {telefono}",
                 # "priority": "NORMAL",  # opcional
-                "queueId": "6e87a3c8-fc95-4ff2-bf65-41021b4789f5",
+                "queueId": queue_id or self.QUEUE_ID_DEFAULT,
 
             }
             print("agente_external_id: ",agente_external_id)
