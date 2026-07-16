@@ -18,11 +18,14 @@ Uso:
 
 ### 2. Sincronizador de reportería
 
-Completa filas incompletas de `conversation-lead-relation` con datos locales.
+Completa filas incompletas de `conversation-lead-relation` con datos locales
+y corrige las filas cuyo `sender` es el número genérico (`51992948046`).
 
 Qué hace:
 - Rellena `telefono_contacto` desde `conversation_ext`.
-- Rellena `sender` desde el teléfono compuesto local o desde la cartera del lead.
+- Rellena `sender` desde el teléfono compuesto local (si trae un sender real)
+  o desde la cartera del lead (`CTRTipoDeCarteraLead_c`).
+- Corrige el `sender` genérico al número real de la cartera del lead.
 - Solo escribe lo que pudo resolver.
 
 Uso:
@@ -35,6 +38,7 @@ Construye y actualiza `sender-last-rdv` a partir de los pares `telefono_contacto
 
 Qué hace:
 - Busca el RDV vigente desde Oracle.
+- Corrige los pares con `sender` genérico usando la cartera del lead antes del UPSERT.
 - Hace UPSERT en la tabla externa.
 - Marca si el proceso fue masivo o surgió de un flujo orgánico.
 

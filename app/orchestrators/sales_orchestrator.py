@@ -52,6 +52,12 @@ class SalesOrchestrator:
         "EE_EST_GES_TAL":  "51984714442",
     }
 
+    # Número genérico (de prueba/fallback) usado como 'from' cuando no se puede
+    # resolver el número por cartera. No pertenece a ninguna cartera de
+    # NUMEROS_INFOBIP_POR_CARTERA, así que todo sender igual a este valor en la
+    # reportería externa se considera corregible vía la cartera del lead.
+    SENDER_GENERICO = "51992948046"
+
     # Cola por defecto ("Comercial") usada cuando el sender no tiene cola GEN
     # mapeada (p. ej. el número de prueba 51992948046 cuando produccion = 0).
     QUEUE_ID_DEFAULT = "6e87a3c8-fc95-4ff2-bf65-41021b4789f5"
@@ -747,7 +753,7 @@ class SalesOrchestrator:
             from_number_infobip = self._obtener_numero_infobip_por_cartera(cartera)
             print(f"Número Infobip por cartera: {from_number_infobip}")
         else:
-            from_number_infobip = "51992948046"
+            from_number_infobip = self.SENDER_GENERICO
             print("Modo de prueba: no se consultará la cartera en Oracle Sales Cloud.")
             
         # Normalizar teléfono: quitar '+' al inicio, eliminar espacios,
@@ -1096,7 +1102,7 @@ class SalesOrchestrator:
 
         # Número Infobip (sender) resuelto: si no hay número por cartera se usa el
         # default para que coincida con el 'from' realmente enviado.
-        telefono_infobip = osc.get("from_number_infobip") or "51992948046"
+        telefono_infobip = osc.get("from_number_infobip") or self.SENDER_GENERICO
         # telefono_creado se guarda como "telefono_usuario;telefono_infobip"
         telefono_creado_valor = f"{telefono_final};{telefono_infobip}"
 
@@ -1348,16 +1354,20 @@ class SalesOrchestrator:
             }
 
         self._vincular_lead_conversation_id(lead_id,conversation_id)
+        # Sender que se registra en la reportería externa: si el 'from' usado fue
+        # el genérico, se corrige al número real de la cartera del lead para que
+        # la data entre bien desde el inicio (sin depender del sincronizador).
+        sender_reporteria = self._corregir_sender_generico(telefono_infobip, lead_id)
         self._notificar_relacion_lead_conversacion(
             lead_id,
             conversation_id,
-            sender=telefono_infobip,
+            sender=sender_reporteria,
             telefono_contacto=telefono_final,
         )
         # Registrar el último RDV por (telefono_contacto, sender) en la reportería externa
         self._registrar_ultimo_rdv_por_sender(
             telefono_contacto=telefono_final,
-            sender=telefono_infobip,
+            sender=sender_reporteria,
             ultimo_rdv_number=rdv_party_number,
             lead_id=lead_id,
         )
@@ -1909,7 +1919,7 @@ class SalesOrchestrator:
                 parameters_payload = parameters
 
             # Asegurar que el campo 'from' no sea vacío (Infobip lo valida)
-            from_number_final = from_number or "51992948046"
+            from_number_final = from_number or self.SENDER_GENERICO
 
             payload = {
                 "from": from_number_final,
@@ -2108,7 +2118,9 @@ class SalesOrchestrator:
                 return False
 
             telefono_contacto = partes[0]
-            sender = partes[1]
+            # El sender guardado en telefono_creado puede ser el genérico;
+            # corregirlo por la cartera del lead antes de registrar.
+            sender = self._corregir_sender_generico(partes[1], conv.lead_id)
             return self._registrar_ultimo_rdv_por_sender(
                 telefono_contacto=telefono_contacto,
                 sender=sender,
@@ -2147,24 +2159,50 @@ class SalesOrchestrator:
             print(f"_obtener_cartera_lead: excepción lead={lead_number} - {e}")
             return None
 
+    def _corregir_sender_generico(self, sender: Optional[str], lead_id) -> Optional[str]:
+        """
+        Devuelve el sender que debe registrarse en la reportería externa.
+
+        Si el sender es el número genérico (SENDER_GENERICO), consulta la cartera
+        del lead en Oracle (CTRTipoDeCarteraLead_c) y la mapea con
+        NUMEROS_INFOBIP_POR_CARTERA para obtener el número real de la cartera.
+        Si no se puede resolver (sin lead, sin cartera o cartera no mapeada),
+        devuelve el sender original sin modificar.
+        """
+        if sender != self.SENDER_GENERICO or not lead_id:
+            return sender
+        try:
+            cartera = self._obtener_cartera_lead(lead_id)
+            numero = self._obtener_numero_infobip_por_cartera(cartera) if cartera else None
+            if numero:
+                print(f"_corregir_sender_generico: lead={lead_id} cartera={cartera} -> sender={numero}")
+                return numero
+            print(f"_corregir_sender_generico: lead={lead_id} sin cartera mapeada (cartera={cartera}); se mantiene el genérico")
+        except Exception as e:
+            print(f"_corregir_sender_generico: excepción lead={lead_id} - {e}")
+        return sender
+
     def sincronizar_reporteria(self, limit: Optional[int] = None) -> Dict[str, Any]:
         """
         Segunda etapa del flujo general.
 
         Sincroniza la reportería externa (conversation-lead-relation): rellena
-        `telefono_contacto` y `sender` en las filas incompletas, usando datos
+        `telefono_contacto` y `sender` en las filas incompletas, y CORRIGE las
+        filas cuyo sender es el número genérico (SENDER_GENERICO), usando datos
         locales y la cartera del lead (Oracle).
 
         - telefono_contacto: de conversation_ext local (por infobip_conversation_id).
-        - sender: del telefono_creado compuesto local si existe; si no, de la
-          cartera del lead (CTRTipoDeCarteraLead_c) -> NUMEROS_INFOBIP_POR_CARTERA.
+        - sender: del telefono_creado compuesto local si trae un sender real
+          (distinto del genérico); si no, de la cartera del lead
+          (CTRTipoDeCarteraLead_c) -> NUMEROS_INFOBIP_POR_CARTERA.
           Carteras no mapeadas se omiten (no se escribe sender) y se reportan.
 
         Solo escribe los campos que pudo resolver (PATCH; el externo respeta
         anti-null). Best-effort por fila.
 
         Args:
-            limit: máximo de filas incompletas a procesar en esta corrida.
+            limit: máximo de filas (incompletas o con sender genérico) a
+                procesar en esta corrida.
         """
         from app.models.conversation_ext import ConversationExt
 
@@ -2187,6 +2225,7 @@ class SalesOrchestrator:
         resumen: Dict[str, Any] = {
             "procesados": 0,
             "actualizados": 0,
+            "genericos_corregidos": 0,
             "sin_datos": 0,
             "errores": 0,
             "carteras_no_mapeadas": {},
@@ -2195,15 +2234,17 @@ class SalesOrchestrator:
         cache_lock = threading.Lock()
         resumen_lock = threading.Lock()
 
-        # 2. Recolectar todas las filas incompletas (respetando limit)
+        # 2. Recolectar filas incompletas o con sender genérico (respetando limit).
+        # Se recorre la tabla completa (sin filtro 'incompletos') porque las filas
+        # con sender genérico cuentan como "completas" para el API externo.
         pendientes = []
         page, total = 1, 0
-        print("sincronizar_reporteria: recolectando filas incompletas...", flush=True)
+        print("sincronizar_reporteria: recolectando filas incompletas o con sender genérico...", flush=True)
         while True:
             try:
                 r = requests.get(
                     base,
-                    params={"page": page, "pageSize": 500, "incompletos": "true"},
+                    params={"page": page, "pageSize": 500},
                     headers=headers,
                     timeout=30,
                     allow_redirects=False,
@@ -2221,8 +2262,8 @@ class SalesOrchestrator:
                 break
             for row in data:
                 tiene_tel = bool(row.get("telefono_contacto"))
-                tiene_sender = bool(row.get("sender"))
-                if tiene_tel and tiene_sender:
+                sender_row = row.get("sender")
+                if tiene_tel and sender_row and sender_row != self.SENDER_GENERICO:
                     continue
                 pendientes.append(row)
                 if limit and len(pendientes) >= limit:
@@ -2234,7 +2275,10 @@ class SalesOrchestrator:
 
         def _procesar_fila(row: Dict[str, Any]) -> None:
             tiene_tel = bool(row.get("telefono_contacto"))
-            tiene_sender = bool(row.get("sender"))
+            sender_actual = row.get("sender")
+            es_generico = sender_actual == self.SENDER_GENERICO
+            # El sender se escribe si falta o si es el genérico (corrección)
+            necesita_sender = not sender_actual or es_generico
             cid = row.get("infobip_conversation_id")
             row_id = row.get("id")
             lead_id = row.get("lead_id")
@@ -2247,10 +2291,12 @@ class SalesOrchestrator:
                 partes = tel_creado.split(";")
                 if not tiene_tel and partes[0]:
                     payload["telefono_contacto"] = partes[0]
-                if len(partes) > 1 and partes[1]:
+                # El sender local solo cuenta si es real (no el genérico),
+                # para no propagar el genérico a la reportería.
+                if len(partes) > 1 and partes[1] and partes[1] != self.SENDER_GENERICO:
                     sender_val = partes[1]
 
-            if not tiene_sender and not sender_val and lead_id:
+            if necesita_sender and not sender_val and lead_id:
                 with cache_lock:
                     cartera = cache_cartera.get(lead_id, ...)
                 if cartera is ...:
@@ -2267,7 +2313,7 @@ class SalesOrchestrator:
                                 resumen["carteras_no_mapeadas"].get(cartera, 0) + 1
                             )
 
-            if sender_val and not tiene_sender:
+            if sender_val and necesita_sender and sender_val != sender_actual:
                 payload["sender"] = sender_val
 
             if not payload:
@@ -2285,6 +2331,8 @@ class SalesOrchestrator:
                     with resumen_lock:
                         if pr.status_code in (200, 201):
                             resumen["actualizados"] += 1
+                            if es_generico and "sender" in payload:
+                                resumen["genericos_corregidos"] += 1
                         else:
                             resumen["errores"] += 1
                             print(f"sincronizar_reporteria: PATCH id={row_id} status={pr.status_code} body={pr.text[:150]}")
@@ -2612,6 +2660,12 @@ class SalesOrchestrator:
         lead_id), solo como fallback: si el par ya vino completo desde
         conversation-lead-relation, ese gana.
 
+        Los pares cuyo sender es el número genérico (SENDER_GENERICO) se
+        corrigen antes del upsert: se consulta la cartera del lead
+        (CTRTipoDeCarteraLead_c) y se registra el par con el número real de la
+        cartera. Si la cartera no se puede resolver, el par se registra con el
+        genérico (comportamiento previo).
+
         Args:
             limit: máximo de pares (telefono_contacto, sender) a procesar en esta corrida.
         """
@@ -2626,6 +2680,7 @@ class SalesOrchestrator:
         resumen: Dict[str, Any] = {
             "pares_encontrados": 0,
             "ya_sincronizados": 0,
+            "genericos_corregidos": 0,
             "procesados": 0,
             "actualizados": 0,
             "sin_rdv": 0,
@@ -2692,6 +2747,42 @@ class SalesOrchestrator:
             key = (partes[0], partes[1])
             if key not in pares:
                 pares[key] = (lead_id_local, 0)
+
+        # Corrección de senders genéricos: para cada par con sender genérico,
+        # resolver la cartera del lead y re-mapear el par al número real de la
+        # cartera. Las carteras se resuelven en paralelo (una consulta por lead).
+        genericos = [
+            (key, datos) for key, datos in pares.items()
+            if key[1] == self.SENDER_GENERICO and datos[0]
+        ]
+        if genericos:
+            print(f"sincronizar_ultimo_rdv_por_sender: {len(genericos)} pares con sender genérico; corrigiendo por cartera del lead", flush=True)
+            lead_ids_genericos = {datos[0] for _, datos in genericos}
+
+            def _resolver_sender_lead(lid):
+                try:
+                    cartera = self._obtener_cartera_lead(lid)
+                    return lid, (self._obtener_numero_infobip_por_cartera(cartera) if cartera else None)
+                except Exception as e:
+                    print(f"sincronizar_ultimo_rdv_por_sender: excepción resolviendo cartera lead={lid} - {e}")
+                    return lid, None
+
+            sender_por_lead: Dict[Any, Optional[str]] = {}
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                for lid, num in executor.map(_resolver_sender_lead, lead_ids_genericos):
+                    sender_por_lead[lid] = num
+
+            for (telefono_contacto, sender), (lead_id, row_id) in genericos:
+                num = sender_por_lead.get(lead_id)
+                if not num:
+                    continue
+                del pares[(telefono_contacto, sender)]
+                key_corregido = (telefono_contacto, num)
+                actual = pares.get(key_corregido)
+                if actual is None or row_id > actual[1]:
+                    pares[key_corregido] = (lead_id, row_id)
+                resumen["genericos_corregidos"] += 1
+            print(f"sincronizar_ultimo_rdv_por_sender: {resumen['genericos_corregidos']} pares corregidos de genérico a sender real", flush=True)
 
         # Aplicar limit antes de procesar
         pendientes = [
@@ -2766,8 +2857,9 @@ class SalesOrchestrator:
         """
         Orquesta los 3 sincronizadores en el orden lógico acordado:
         1. Histórico (todas las conversaciones locales no existentes en Reportería)
-        2. Reportería incompleta (rellena telefono_contacto y sender faltantes)
-        3. Último RDV por sender
+        2. Reportería incompleta (rellena telefono_contacto y sender faltantes,
+           y corrige senders genéricos por la cartera del lead)
+        3. Último RDV por sender (también corrige pares con sender genérico)
         """
         historico = self.sincronizar_historico_conversaciones(
             batch_size=batch_size,
