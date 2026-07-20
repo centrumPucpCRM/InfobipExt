@@ -740,7 +740,7 @@ class SalesOrchestrator:
             osc_conversation_id: ID de conversación existente en Infobip (opcional)
         """
         from_number_infobip = 0
-        produccion = 0  # 1 = producción (usa la cartera real); 0 = prueba (número fijo)
+        produccion = 1  # 1 = producción (usa la cartera real); 0 = prueba (número fijo)
         if produccion == 1:
             # Obtener la cartera (CTRCartera_c) del catálogo catalogProductGroups
             cartera = self._buscar_cartera_jp(osc_conversation_codigo_crm).get("CTRCartera_c")

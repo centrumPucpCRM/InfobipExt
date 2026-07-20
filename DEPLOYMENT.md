@@ -10,6 +10,9 @@ Desplegado:
 git pull origin main
 docker build -t infobipext-api .
 docker-compose up -d
+
+Ejecutar el sincronizador general dentro del contenedor:
+docker-compose exec api python sincronizar_general.py
 ================================================================
 ---------------------------------------
 Comandos de sincronizacion de archivos:
