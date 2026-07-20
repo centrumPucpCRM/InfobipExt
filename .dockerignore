@@ -1,0 +1,27 @@
+# Base de datos local: NO va dentro de la imagen.
+# docker-compose la monta como volumen (./infobip.db:/app/infobip.db),
+# copiarla en la imagen solo infla cada build (~500MB por capa) y llena el disco.
+infobip.db
+*.db
+*.db.gz
+
+# Git
+.git
+.gitignore
+
+# Entorno local (docker-compose lo inyecta con env_file, no hace falta en la imagen)
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Logs (montados como volumen)
+logs/
+
+# Herramientas locales
+.claude/
+CLAUDE.md

@@ -33,9 +33,6 @@ infobip.db
 *.log
 logs/
 
-# Docker
-.dockerignore
-
 # OS
 .DS_Store
 Thumbs.db
